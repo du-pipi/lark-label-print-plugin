@@ -62,6 +62,9 @@ input, select {
 }
 
 .toolbar-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 15px;
   font-weight: 600;
   margin-right: 12px;

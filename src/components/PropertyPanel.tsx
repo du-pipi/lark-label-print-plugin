@@ -1,4 +1,5 @@
 import { useApp } from '../store/AppContext';
+import { Icon } from './Icon';
 import type { LabelItem, TableCell } from '../types';
 
 export default function PropertyPanel() {
@@ -11,7 +12,7 @@ export default function PropertyPanel() {
       <div className="property-panel no-print">
         <div className="panel-header">属性设置</div>
         <div className="empty-property">
-          <div style={{ fontSize: 32, marginBottom: 8 }}>📋</div>
+          <div style={{ color: '#c9cdd4', marginBottom: 8 }}><Icon name="clipboard" size={32} /></div>
           <div>选中标签中的元素</div>
           <div style={{ marginTop: 4, fontSize: 11 }}>可调整位置、大小、字体、颜色等</div>
         </div>
@@ -71,7 +72,7 @@ export default function PropertyPanel() {
       {selectedItem.lockedPosition && (
         <div className="property-section" style={{ background: '#f2f3f5', borderBottom: '1px solid #e5e6eb', padding: '6px 12px' }}>
           <div style={{ fontSize: 11, color: '#86909c' }}>
-            📌 位置已锁定（距边界 2mm 固定），可自由编辑行列数/单元格/样式
+            <Icon name="lock" size={12} /> 位置已锁定（距边界 2mm 固定），可自由编辑行列数/单元格/样式
           </div>
         </div>
       )}

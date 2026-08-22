@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../store/AppContext';
+import { Icon } from './Icon';
 
 // 记录选择器：插件内自行管理勾选（飞书 SDK Selection 不支持多选）
 // 样式采用飞书 UI 设计语言；搜索按「角色名称」字段进行，无默认列表，输入后显示候选。
@@ -60,7 +61,7 @@ export default function RecordPicker() {
       {expanded && (
         <div className="rp-body">
           <div className="rp-search">
-            <span className="rp-search-ico">🔍</span>
+            <Icon name="search" size={14} className="rp-search-ico" />
             <input
               type="text"
               className="rp-input"
@@ -71,7 +72,7 @@ export default function RecordPicker() {
             />
             {search && (
               <span className="rp-search-clear" onClick={() => setSearch('')}>
-                ✕
+                <Icon name="close" size={12} />
               </span>
             )}
           </div>
@@ -96,7 +97,7 @@ export default function RecordPicker() {
                       if (!checked) dispatch({ type: 'SELECT_RECORD', id: r.id });
                     }}
                   >
-                    <span className={`rp-check ${checked ? 'on' : ''}`}>{checked ? '✓' : ''}</span>
+                    <span className={`rp-check ${checked ? 'on' : ''}`}>{checked ? <Icon name="check" size={12} /> : ''}</span>
                     <span className="rp-row-label">{recordLabel(r)}</span>
                   </div>
                 );

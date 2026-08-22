@@ -43,7 +43,7 @@ export default function FieldPanel() {
         <input
           type="text"
           className="field-search-inline"
-          placeholder="🔍搜索"
+          placeholder="搜索字段"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{

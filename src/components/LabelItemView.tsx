@@ -3,6 +3,7 @@ import { useApp } from '../store/AppContext';
 import type { LabelItem, TableCell } from '../types';
 import { mmToPx, ptToPx, getDisplayValue } from '../utils';
 import { BarcodeView, QrcodeView } from './Barcode';
+import { Icon } from './Icon';
 
 interface Props {
   item: LabelItem;
@@ -336,7 +337,7 @@ export default function LabelItemView({ item, scale, isSelected, onSelect, recor
           position: 'absolute', top: 2, right: 2, fontSize: 8, color: '#86909c',
           background: 'rgba(255,255,255,0.8)', borderRadius: 2, padding: '0 2px',
           pointerEvents: 'none',
-        }}>📌</div>
+        }}><Icon name="lock" size={10} /></div>
       )}
       {isSelected && !readOnly && (
         <>

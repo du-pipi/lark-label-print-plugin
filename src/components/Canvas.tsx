@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { useApp } from '../store/AppContext';
 import LabelItemView from './LabelItemView';
+import { Icon } from './Icon';
 import { mmToPx } from '../utils';
 
 export default function Canvas() {
@@ -82,7 +83,7 @@ export default function Canvas() {
         {/* 批量预览提示（仅屏幕显示，打印时隐藏） */}
         {isBatchMode && (
           <div className="no-print" style={{ marginBottom: 16, padding: '8px 12px', background: '#e8f3ff', borderRadius: 8, fontSize: 12, color: '#165dff' }}>
-            📋 批量预览：{batchRecordIds.length > 0 ? batchRecordIds.length : 1} 条记录 × {printCopies} 份 = {(batchRecordIds.length > 0 ? batchRecordIds.length : 1) * printCopies} 个标签。点击「🖨️ 批量打印」输出全部。
+            <Icon name="clipboard" size={13} /> 批量预览：{batchRecordIds.length > 0 ? batchRecordIds.length : 1} 条记录 × {printCopies} 份 = {(batchRecordIds.length > 0 ? batchRecordIds.length : 1) * printCopies} 个标签。点击「<Icon name="print" size={13} /> 批量打印」输出全部。
           </div>
         )}
 

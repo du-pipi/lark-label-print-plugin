@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Icon } from './Icon';
 import { useApp, loadTemplates } from '../store/AppContext';
 import { labelPresets } from '../mock/data';
 import type { LabelConfig, LabelTemplate } from '../types';
@@ -80,7 +81,7 @@ export default function Toolbar() {
     <>
       <div className="toolbar no-print">
         <div className="toolbar-left">
-          <span className="toolbar-title">🏷️ 数据标签打印</span>
+          <span className="toolbar-title"><Icon name="tag" size={18} /> 数据标签打印</span>
           {state.tableName && (
             <span className="tb-chip">{state.tableName}</span>
           )}
@@ -97,12 +98,12 @@ export default function Toolbar() {
           <div className="toolbar-divider" />
 
           {/* 撤销/重做 */}
-          <button className="toolbar-btn" onClick={undo} disabled={!canUndo} title="撤销 (Ctrl+Z)" style={{ opacity: canUndo ? 1 : 0.4 }}>↩</button>
-          <button className="toolbar-btn" onClick={redo} disabled={!canRedo} title="重做 (Ctrl+Y)" style={{ opacity: canRedo ? 1 : 0.4 }}>↪</button>
+          <button className="toolbar-btn" onClick={undo} disabled={!canUndo} title="撤销 (Ctrl+Z)" style={{ opacity: canUndo ? 1 : 0.4 }}><Icon name="undo" /></button>
+          <button className="toolbar-btn" onClick={redo} disabled={!canRedo} title="重做 (Ctrl+Y)" style={{ opacity: canRedo ? 1 : 0.4 }}><Icon name="redo" /></button>
           <div className="toolbar-divider" />
 
           {/* 模板管理 */}
-          <button className="toolbar-btn" onClick={() => setShowTemplates(true)}>📐 模板</button>
+          <button className="toolbar-btn" onClick={() => setShowTemplates(true)}><Icon name="template" /> 模板</button>
           <div className="toolbar-divider" />
 
           {/* 批量选择控制 */}
@@ -142,11 +143,11 @@ export default function Toolbar() {
               />
             </div>
           )}
-          <button className="toolbar-btn" onClick={() => setShowSettings(true)}>⚙️ 标签设置</button>
-          <button className="toolbar-btn danger" onClick={handleClear}>🗑️ 清空</button>
+          <button className="toolbar-btn" onClick={() => setShowSettings(true)}><Icon name="settings" /> 标签设置</button>
+          <button className="toolbar-btn danger" onClick={handleClear}><Icon name="trash" /> 清空</button>
           <div className="toolbar-divider" />
           <button className="toolbar-btn primary" onClick={handlePrint}>
-            {isBatchMode ? `🖨️ 批量打印 (${batchRecordIds.length * state.printCopies})` : '🖨️ 打印'}
+            {isBatchMode ? <><Icon name="print" /> 批量打印 ({batchRecordIds.length * state.printCopies})</> : <><Icon name="print" /> 打印</>}
           </button>
         </div>
       </div>
@@ -365,7 +366,7 @@ export default function Toolbar() {
             style={{ background: '#fff', borderRadius: 12, padding: 24, width: 440, maxHeight: '70vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 style={{ marginBottom: 16, fontSize: 16 }}>📐 模板管理</h3>
+            <h3 style={{ marginBottom: 16, fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="template" size={18} /> 模板管理</h3>
 
             {/* 保存当前模板 */}
             <div style={{ marginBottom: 20, padding: 12, background: '#f7f8fa', borderRadius: 8 }}>
