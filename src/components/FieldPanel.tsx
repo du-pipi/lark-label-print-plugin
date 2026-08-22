@@ -14,8 +14,14 @@ const typeLabels: Record<FieldType, string> = {
 };
 
 export default function FieldPanel() {
-  const { state, addItemFromField, addStaticText, addTable } = useApp();
+  const { state, addItemFromField, addStaticText, addTable, getFieldValue } = useApp();
   const [draggingField, setDraggingField] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+
+  // 字段搜索过滤
+  const filteredFields = search.trim()
+    ? state.fields.filter(f => f.name.toLowerCase().includes(search.toLowerCase()))
+    : state.fields;
 
   const handleDragStart = (e: React.DragEvent, field: Field) => {
     e.dataTransfer.setData('fieldId', field.id);
@@ -23,46 +29,61 @@ export default function FieldPanel() {
     setDraggingField(field.id);
   };
 
-  const handleDragEnd = () => {
-    setDraggingField(null);
-  };
-
-  const handleDoubleClick = (field: Field) => {
-    addItemFromField(field);
-  };
+  const handleDragEnd = () => setDraggingField(null);
+  const handleDoubleClick = (field: Field) => addItemFromField(field);
 
   return (
     <div className="field-panel no-print">
       <div className="panel-header">
         <span>字段列表</span>
-        <span style={{ fontSize: 11, color: '#86909c' }}>
-          {state.fields.length} 个
-        </span>
+        <span style={{ fontSize: 11, color: '#86909c' }}>{state.fields.length} 个</span>
       </div>
+
+      {/* 字段搜索框 */}
+      <input
+        type="text"
+        className="property-input field-search"
+        placeholder="🔍 搜索字段..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        style={{ width: '100%', marginBottom: 8, padding: '4px 8px' }}
+      />
+
       <div className="field-list">
-        {state.fields.map((field) => (
-          <div
-            key={field.id}
-            className={`field-item ${draggingField === field.id ? 'dragging' : ''}`}
-            draggable
-            onDragStart={(e) => handleDragStart(e, field)}
-            onDragEnd={handleDragEnd}
-            onDoubleClick={() => handleDoubleClick(field)}
-            title={`${field.name}（拖拽到标签，或双击添加）`}
-          >
-            <span className={`field-icon ${field.type}`}>
-              {typeLabels[field.type]}
-            </span>
-            <span className="field-name">{field.name}</span>
-          </div>
-        ))}
+        {filteredFields.length === 0 ? (
+          <div style={{ fontSize: 12, color: '#c9cdd4', textAlign: 'center', padding: 20 }}>无匹配字段</div>
+        ) : (
+          filteredFields.map((field) => {
+            // 字段值预览（当前选中记录的值）
+            const previewVal = getFieldValue(field.id);
+            const previewStr = previewVal !== '' && previewVal !== undefined ? String(previewVal) : '';
+            const truncated = previewStr.length > 20 ? previewStr.slice(0, 20) + '…' : previewStr;
+            return (
+              <div
+                key={field.id}
+                className={`field-item ${draggingField === field.id ? 'dragging' : ''}`}
+                draggable
+                onDragStart={(e) => handleDragStart(e, field)}
+                onDragEnd={handleDragEnd}
+                onDoubleClick={() => handleDoubleClick(field)}
+                title={`${field.name}（拖拽到标签，或双击添加）`}
+              >
+                <span className={`field-icon ${field.type}`}>{typeLabels[field.type]}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="field-name">{field.name}</div>
+                  {truncated && (
+                    <div style={{ fontSize: 10, color: '#86909c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {truncated}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
-      <button className="add-static-btn" onClick={() => addStaticText()}>
-        + 添加静态文本
-      </button>
-      <button className="add-static-btn" onClick={() => addTable()} style={{ marginTop: 0 }}>
-        + 添加表格
-      </button>
+      <button className="add-static-btn" onClick={() => addStaticText()}>+ 添加静态文本</button>
+      <button className="add-static-btn" onClick={() => addTable()} style={{ marginTop: 0 }}>+ 添加表格</button>
 
       {/* 字段诊断面板：任何情况都显示，暴露飞书原始值结构与取数错误，定位"字段名显示但值取不到"问题 */}
       <div style={{ marginTop: 8, borderTop: '1px solid #e5e6eb', paddingTop: 8 }}>

@@ -67,6 +67,22 @@ export default function PropertyPanel() {
         </span>
       </div>
 
+      {/* 锁定提示 + 解锁按钮 */}
+      {selectedItem.locked && (
+        <div className="property-section" style={{ background: '#fff7e8', borderBottom: '1px solid #ffd4a8' }}>
+          <div style={{ fontSize: 12, color: '#ff7d00', marginBottom: 6 }}>
+            🔒 此元素已锁定（置底表格，不可移动/缩放/删除）
+          </div>
+          <button
+            className="toolbar-btn"
+            style={{ fontSize: 11, padding: '4px 10px' }}
+            onClick={() => update({ locked: false })}
+          >
+            🔓 解锁（解锁后可自由调整）
+          </button>
+        </div>
+      )}
+
       {/* 位置和尺寸 */}
       <div className="property-section">
         <div className="property-section-title">位置与尺寸</div>
@@ -77,6 +93,7 @@ export default function PropertyPanel() {
             className="property-input"
             value={selectedItem.x}
             step={0.5}
+            disabled={!!selectedItem.locked}
             onChange={(e) => update({ x: parseFloat(e.target.value) || 0 })}
           />
           <span className="property-label">Y (mm)</span>
@@ -85,6 +102,7 @@ export default function PropertyPanel() {
             className="property-input"
             value={selectedItem.y}
             step={0.5}
+            disabled={!!selectedItem.locked}
             onChange={(e) => update({ y: parseFloat(e.target.value) || 0 })}
           />
         </div>
@@ -96,6 +114,7 @@ export default function PropertyPanel() {
             value={selectedItem.width}
             step={0.5}
             min={5}
+            disabled={!!selectedItem.locked}
             onChange={(e) => update({ width: parseFloat(e.target.value) || 5 })}
           />
           <span className="property-label">高 (mm)</span>
@@ -105,6 +124,7 @@ export default function PropertyPanel() {
             value={selectedItem.height}
             step={0.5}
             min={3}
+            disabled={!!selectedItem.locked}
             onChange={(e) => update({ height: parseFloat(e.target.value) || 3 })}
           />
         </div>

@@ -5,13 +5,13 @@ import { mmToPx } from '../utils';
 
 export default function Canvas() {
   const { state, dispatch, addItemFromField } = useApp();
-  const { items, selectedItemId, labelConfig, fields, batchRecordIds } = state;
+  const { items, selectedItemId, labelConfig, fields, batchRecordIds, printCopies } = state;
   const [scale, setScale] = useState(1.5);
   const [dragOverCell, setDragOverCell] = useState<number | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  // 是否批量预览模式（勾选了多条记录）
-  const isBatchMode = batchRecordIds.length > 1;
+  // 是否批量预览模式（勾选了多条记录，或单条但份数>1）
+  const isBatchMode = batchRecordIds.length > 1 || (batchRecordIds.length === 1 && printCopies > 1) || (batchRecordIds.length === 0 && printCopies > 1);
 
   // 计算页面尺寸
   const pageWidth = labelConfig.pageMarginLeft + labelConfig.pageMarginRight +
@@ -79,47 +79,56 @@ export default function Canvas() {
   return (
     <div className="canvas-area" ref={canvasRef} onClick={handleCanvasClick}>
       <div className="canvas-wrapper">
-        {/* 批量预览模式：展示所有勾选记录的标签 */}
+        {/* 批量预览提示 */}
         {isBatchMode && (
           <div style={{ marginBottom: 16, padding: '8px 12px', background: '#e8f3ff', borderRadius: 8, fontSize: 12, color: '#165dff' }}>
-            📋 批量预览：已选中 {batchRecordIds.length} 条记录，每条按模板生成一个标签。点击「🖨️ 批量打印」输出全部。
+            📋 批量预览：{batchRecordIds.length > 0 ? batchRecordIds.length : 1} 条记录 × {printCopies} 份 = {(batchRecordIds.length > 0 ? batchRecordIds.length : 1) * printCopies} 个标签。点击「🖨️ 批量打印」输出全部。
           </div>
         )}
 
-        {/* 批量预览区域：每条记录一个标签，纵向排列 */}
-        {isBatchMode && batchRecordIds.map((rid, batchIdx) => (
-          <div
-            key={rid}
-            className="batch-label-page"
-            style={{
-              width: `${mmToPx(labelConfig.labelWidth) * scale}px`,
-              height: `${mmToPx(labelConfig.labelHeight) * scale}px`,
-              background: labelConfig.background,
-              border: '1px dashed #c9cdd4',
-              marginBottom: `${mmToPx(5) * scale}px`,
-              position: 'relative',
-              overflow: 'hidden',
-              breakAfter: 'page' as React.CSSProperties['breakAfter'],
-              pageBreakAfter: 'always' as React.CSSProperties['pageBreakAfter'],
-            }}
-          >
-            {/* 标签序号 */}
-            <div style={{ position: 'absolute', top: -16, left: 0, fontSize: 10, color: '#86909c' }}>
-              #{batchIdx + 1}
+        {/* 批量预览区域：每条记录 × 每份 → 一个标签，纵向排列 */}
+        {isBatchMode && (() => {
+          // 确定要渲染的记录列表
+          const renderIds = batchRecordIds.length > 0 ? batchRecordIds : [state.selectedRecordId];
+          // 按份数展开
+          const expanded: { rid: string; copyIdx: number }[] = [];
+          for (const rid of renderIds) {
+            for (let c = 0; c < printCopies; c++) {
+              expanded.push({ rid, copyIdx: c });
+            }
+          }
+          return expanded.map(({ rid, copyIdx }, batchIdx) => (
+            <div
+              key={`${rid}_${copyIdx}`}
+              className="batch-label-page"
+              style={{
+                width: `${mmToPx(labelConfig.labelWidth) * scale}px`,
+                height: `${mmToPx(labelConfig.labelHeight) * scale}px`,
+                background: labelConfig.background,
+                border: '1px dashed #c9cdd4',
+                marginBottom: `${mmToPx(5) * scale}px`,
+                position: 'relative',
+                overflow: 'hidden',
+                pageBreakAfter: 'always' as React.CSSProperties['pageBreakAfter'],
+              }}
+            >
+              <div style={{ position: 'absolute', top: -16, left: 0, fontSize: 10, color: '#86909c' }}>
+                #{batchIdx + 1}{printCopies > 1 ? ` (第${copyIdx + 1}份)` : ''}
+              </div>
+              {items.map((item) => (
+                <LabelItemView
+                  key={item.id}
+                  item={item}
+                  scale={scale}
+                  isSelected={false}
+                  onSelect={() => {}}
+                  recordId={rid}
+                  readOnly
+                />
+              ))}
             </div>
-            {items.map((item) => (
-              <LabelItemView
-                key={item.id}
-                item={item}
-                scale={scale}
-                isSelected={false}
-                onSelect={() => {}}
-                recordId={rid}
-                readOnly
-              />
-            ))}
-          </div>
-        ))}
+          ));
+        })()}
 
         {/* 编辑模式：单标签编辑画布（批量模式时隐藏） */}
         {!isBatchMode && (
@@ -159,7 +168,7 @@ export default function Canvas() {
           <button className="zoom-btn" onClick={zoomIn} title="放大">+</button>
           <span style={{ fontSize: 11, color: '#86909c', marginLeft: 8 }}>
             {labelConfig.labelWidth}×{labelConfig.labelHeight}mm
-            {isBatchMode ? ` · 批量 ${batchRecordIds.length} 条` : ` · ${labelConfig.columns}×${labelConfig.rows}`}
+            {isBatchMode ? ` · 批量 ${(batchRecordIds.length > 0 ? batchRecordIds.length : 1) * printCopies} 个` : ` · ${labelConfig.columns}×${labelConfig.rows}`}
           </span>
         </div>
       </div>

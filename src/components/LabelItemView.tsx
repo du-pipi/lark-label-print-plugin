@@ -18,8 +18,12 @@ export default function LabelItemView({ item, scale, isSelected, onSelect, recor
   const itemRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+  // 对齐吸附辅助线（拖动时显示）
+  const [guides, setGuides] = useState<{ v?: number; h?: number }>({});
   const dragStart = useRef({ x: 0, y: 0, itemX: 0, itemY: 0 });
   const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
+
+  const isLocked = !!item.locked;
 
   // 元素位置（mm -> px * scale）
   const style: React.CSSProperties = {
@@ -49,7 +53,7 @@ export default function LabelItemView({ item, scale, isSelected, onSelect, recor
 
   // 拖动元素
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (readOnly) return;
+    if (readOnly || isLocked) return;
     if ((e.target as HTMLElement).classList.contains('resize-handle')) return;
     e.stopPropagation();
     onSelect();
@@ -68,13 +72,63 @@ export default function LabelItemView({ item, scale, isSelected, onSelect, recor
     const handleMouseMove = (e: MouseEvent) => {
       const dx = (e.clientX - dragStart.current.x) / mmToPx(1) / scale;
       const dy = (e.clientY - dragStart.current.y) / mmToPx(1) / scale;
-      const newX = Math.max(0, Math.round((dragStart.current.itemX + dx) * 10) / 10);
-      const newY = Math.max(0, Math.round((dragStart.current.itemY + dy) * 10) / 10);
+      let newX = Math.max(0, Math.round((dragStart.current.itemX + dx) * 10) / 10);
+      let newY = Math.max(0, Math.round((dragStart.current.itemY + dy) * 10) / 10);
+
+      // 对齐吸附：检测与其他元素边缘/中心、画布边缘的对齐
+      const threshold = 1; // 1mm 吸附阈值
+      const newGuides: { v?: number; h?: number } = {};
+      const lc = state.labelConfig;
+      // 画布中心线
+      const canvasCenterX = lc.labelWidth / 2;
+      const canvasCenterY = lc.labelHeight / 2;
+      // 当前元素中心
+      const itemCenterX = newX + item.width / 2;
+      const itemCenterY = newY + item.height / 2;
+
+      // 吸附到画布中心
+      if (Math.abs(itemCenterX - canvasCenterX) < threshold) {
+        newX = canvasCenterX - item.width / 2;
+        newGuides.v = canvasCenterX;
+      }
+      if (Math.abs(itemCenterY - canvasCenterY) < threshold) {
+        newY = canvasCenterY - item.height / 2;
+        newGuides.h = canvasCenterY;
+      }
+      // 吸附到画布边缘
+      if (Math.abs(newX) < threshold) { newX = 0; newGuides.v = 0; }
+      if (Math.abs(newY) < threshold) { newY = 0; newGuides.h = 0; }
+      if (Math.abs(newX + item.width - lc.labelWidth) < threshold) {
+        newX = lc.labelWidth - item.width; newGuides.v = lc.labelWidth;
+      }
+      if (Math.abs(newY + item.height - lc.labelHeight) < threshold) {
+        newY = lc.labelHeight - item.height; newGuides.h = lc.labelHeight;
+      }
+      // 吸附到其他元素
+      for (const other of state.items) {
+        if (other.id === item.id) continue;
+        // 水平对齐：左边缘、中心、右边缘
+        const otherLeft = other.x;
+        const otherCenterX = other.x + other.width / 2;
+        const otherRight = other.x + other.width;
+        if (Math.abs(newX - otherLeft) < threshold) { newX = otherLeft; newGuides.v = otherLeft; }
+        if (Math.abs(itemCenterX - otherCenterX) < threshold) { newX = otherCenterX - item.width / 2; newGuides.v = otherCenterX; }
+        if (Math.abs(newX + item.width - otherRight) < threshold) { newX = otherRight - item.width; newGuides.v = otherRight; }
+        // 垂直对齐
+        const otherTop = other.y;
+        const otherCenterY = other.y + other.height / 2;
+        const otherBottom = other.y + other.height;
+        if (Math.abs(newY - otherTop) < threshold) { newY = otherTop; newGuides.h = otherTop; }
+        if (Math.abs(itemCenterY - otherCenterY) < threshold) { newY = otherCenterY - item.height / 2; newGuides.h = otherCenterY; }
+        if (Math.abs(newY + item.height - otherBottom) < threshold) { newY = otherBottom - item.height; newGuides.h = otherBottom; }
+      }
+      setGuides(newGuides);
       dispatch({ type: 'MOVE_ITEM', id: item.id, x: newX, y: newY });
     };
 
     const handleMouseUp = () => {
       setIsDragging(false);
+      setGuides({});
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -83,10 +137,11 @@ export default function LabelItemView({ item, scale, isSelected, onSelect, recor
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, item.id, scale, dispatch]);
+  }, [isDragging, item.id, item.width, item.height, scale, dispatch, state.items, state.labelConfig]);
 
   // 调整大小
   const handleResizeStart = (e: React.MouseEvent) => {
+    if (readOnly || isLocked) return;
     e.stopPropagation();
     onSelect();
     setIsResizing(true);
@@ -255,12 +310,35 @@ export default function LabelItemView({ item, scale, isSelected, onSelect, recor
   return (
     <div
       ref={itemRef}
-      className={`label-item ${isSelected ? 'selected' : ''}`}
+      className={`label-item ${isSelected ? 'selected' : ''} ${isLocked ? 'locked' : ''}`}
       style={style}
       onMouseDown={handleMouseDown}
     >
       {renderContent()}
-      {isSelected && !readOnly && (
+      {/* 对齐吸附辅助线 */}
+      {isDragging && guides.v !== undefined && (
+        <div style={{
+          position: 'absolute', left: `${mmToPx(guides.v) * scale}px`, top: -2,
+          width: 0, height: '200%', borderLeft: '1px dashed #165dff',
+          pointerEvents: 'none', zIndex: 9999,
+        }} />
+      )}
+      {isDragging && guides.h !== undefined && (
+        <div style={{
+          position: 'absolute', top: `${mmToPx(guides.h) * scale}px`, left: -2,
+          height: 0, width: '200%', borderTop: '1px dashed #165dff',
+          pointerEvents: 'none', zIndex: 9999,
+        }} />
+      )}
+      {/* 锁定标记 */}
+      {isLocked && (
+        <div style={{
+          position: 'absolute', top: 2, right: 2, fontSize: 8, color: '#86909c',
+          background: 'rgba(255,255,255,0.8)', borderRadius: 2, padding: '0 2px',
+          pointerEvents: 'none',
+        }}>🔒</div>
+      )}
+      {isSelected && !readOnly && !isLocked && (
         <>
           <div className="resize-handle e" onMouseDown={handleResizeStart} />
           <div className="resize-handle s" onMouseDown={handleResizeStart} />

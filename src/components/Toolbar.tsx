@@ -1,16 +1,26 @@
-import { useState } from 'react';
-import { useApp } from '../store/AppContext';
+import { useState, useEffect } from 'react';
+import { useApp, loadTemplates } from '../store/AppContext';
 import { labelPresets } from '../mock/data';
-import type { LabelConfig } from '../types';
+import type { LabelConfig, LabelTemplate } from '../types';
 
 export default function Toolbar() {
-  const { state, dispatch } = useApp();
+  const { state, dispatch, undo, redo, saveTemplate, loadTemplateById, deleteTemplate, selectAllRecords, refreshSelection } = useApp();
   const { labelConfig, records, selectedRecordId, items, batchRecordIds } = state;
   const [showSettings, setShowSettings] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [templates, setTemplates] = useState<LabelTemplate[]>([]);
+  const [tplName, setTplName] = useState('');
 
   const isBatchMode = batchRecordIds.length > 1;
+  const canUndo = state.historyIndex >= 0;
+  const canRedo = state.historyIndex + 1 < state.history.length;
+
+  useEffect(() => {
+    setTemplates(loadTemplates());
+  }, [showTemplates]);
 
   const handlePrint = () => {
+    // 动态设置 @page 尺寸，让打印机按标签纸实际大小出纸
     // 批量模式：每个标签一页，页面尺寸 = 单个标签尺寸
     // 单条模式：页面尺寸 = columns×rows 排列后的整页尺寸
     const pageW = isBatchMode
@@ -32,15 +42,11 @@ export default function Toolbar() {
     }
     styleEl.textContent = `@page { size: ${pageW}mm ${pageH}mm; margin: 0; }`;
 
-    dispatch({ type: 'TOGGLE_PRINT_MODE', value: true });
-    // 延迟一帧让 DOM 更新后再打印
+    // 直接调用系统打印对话框，打印当前页面（所见即所得）
+    // @media print CSS 自动隐藏编辑 UI，只保留标签内容
     setTimeout(() => {
       window.print();
-      // 打印后恢复编辑模式
-      setTimeout(() => {
-        dispatch({ type: 'TOGGLE_PRINT_MODE', value: false });
-      }, 500);
-    }, 100);
+    }, 50);
   };
 
   const handleClear = () => {
@@ -88,8 +94,18 @@ export default function Toolbar() {
             </span>
           )}
           <div className="toolbar-divider" />
-          {/* 批量模式时不显示单条预览选择器 */}
-          {!isBatchMode && (
+
+          {/* 撤销/重做 */}
+          <button className="toolbar-btn" onClick={undo} disabled={!canUndo} title="撤销 (Ctrl+Z)" style={{ opacity: canUndo ? 1 : 0.4 }}>↩</button>
+          <button className="toolbar-btn" onClick={redo} disabled={!canRedo} title="重做 (Ctrl+Y)" style={{ opacity: canRedo ? 1 : 0.4 }}>↪</button>
+          <div className="toolbar-divider" />
+
+          {/* 模板管理 */}
+          <button className="toolbar-btn" onClick={() => setShowTemplates(true)}>📐 模板</button>
+          <div className="toolbar-divider" />
+
+          {/* 批量选择控制 */}
+          {!isBatchMode ? (
             <div className="record-selector">
               <label>预览记录:</label>
               <select
@@ -98,25 +114,38 @@ export default function Toolbar() {
                 onChange={(e) => dispatch({ type: 'SELECT_RECORD', id: e.target.value })}
               >
                 {records.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {recordLabel(r)}
-                  </option>
+                  <option key={r.id} value={r.id}>{recordLabel(r)}</option>
                 ))}
               </select>
             </div>
+          ) : (
+            <span style={{ fontSize: 12, color: '#165dff' }}>批量预览中</span>
           )}
+          <button className="toolbar-btn" onClick={selectAllRecords} title="全选所有记录" style={{ fontSize: 11, padding: '2px 8px' }}>全选</button>
+          <button className="toolbar-btn" onClick={() => { dispatch({ type: 'SET_BATCH_RECORDS', recordIds: [] }); refreshSelection(); }} title="清空选择" style={{ fontSize: 11, padding: '2px 8px' }}>清空</button>
         </div>
 
         <div className="toolbar-right">
-          <button className="toolbar-btn" onClick={() => setShowSettings(true)}>
-            ⚙️ 标签设置
-          </button>
-          <button className="toolbar-btn danger" onClick={handleClear}>
-            🗑️ 清空
-          </button>
+          {/* 批量打印份数 */}
+          {isBatchMode && (
+            <div className="record-selector" style={{ marginRight: 8 }}>
+              <label>每条份数:</label>
+              <input
+                type="number"
+                className="property-input"
+                style={{ width: 50 }}
+                value={state.printCopies}
+                min={1}
+                max={99}
+                onChange={(e) => dispatch({ type: 'SET_PRINT_COPIES', value: Math.max(1, parseInt(e.target.value) || 1) })}
+              />
+            </div>
+          )}
+          <button className="toolbar-btn" onClick={() => setShowSettings(true)}>⚙️ 标签设置</button>
+          <button className="toolbar-btn danger" onClick={handleClear}>🗑️ 清空</button>
           <div className="toolbar-divider" />
           <button className="toolbar-btn primary" onClick={handlePrint}>
-            {isBatchMode ? `🖨️ 批量打印 (${batchRecordIds.length})` : '🖨️ 打印'}
+            {isBatchMode ? `🖨️ 批量打印 (${batchRecordIds.length * state.printCopies})` : '🖨️ 打印'}
           </button>
         </div>
       </div>
@@ -316,6 +345,94 @@ export default function Toolbar() {
               <button className="toolbar-btn" onClick={() => setShowSettings(false)}>
                 关闭
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 模板管理弹窗 */}
+      {showTemplates && (
+        <div
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.4)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+          }}
+          onClick={() => setShowTemplates(false)}
+        >
+          <div
+            style={{ background: '#fff', borderRadius: 12, padding: 24, width: 440, maxHeight: '70vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ marginBottom: 16, fontSize: 16 }}>📐 模板管理</h3>
+
+            {/* 保存当前模板 */}
+            <div style={{ marginBottom: 20, padding: 12, background: '#f7f8fa', borderRadius: 8 }}>
+              <div style={{ fontSize: 12, color: '#86909c', marginBottom: 8 }}>保存当前排版为模板</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="text"
+                  className="property-input"
+                  style={{ flex: 1 }}
+                  placeholder="模板名称（如：价格标签）"
+                  value={tplName}
+                  onChange={(e) => setTplName(e.target.value)}
+                />
+                <button
+                  className="toolbar-btn primary"
+                  onClick={() => {
+                    if (!tplName.trim()) return;
+                    saveTemplate(tplName.trim());
+                    setTplName('');
+                    setTemplates(loadTemplates());
+                  }}
+                >
+                  保存
+                </button>
+              </div>
+              <div style={{ fontSize: 11, color: '#86909c', marginTop: 6 }}>
+                当前有 {items.length} 个元素，尺寸 {labelConfig.labelWidth}×{labelConfig.labelHeight}mm
+              </div>
+            </div>
+
+            {/* 已保存模板列表 */}
+            <div style={{ fontSize: 12, color: '#86909c', marginBottom: 8 }}>已保存模板（{templates.length}）</div>
+            {templates.length === 0 ? (
+              <div style={{ fontSize: 12, color: '#c9cdd4', textAlign: 'center', padding: 20 }}>暂无保存的模板</div>
+            ) : (
+              templates.map((tpl) => (
+                <div
+                  key={tpl.id}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', marginBottom: 4, background: '#f7f8fa', borderRadius: 6 }}
+                >
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 'bold' }}>{tpl.name}</div>
+                    <div style={{ fontSize: 11, color: '#86909c' }}>
+                      {tpl.items.length} 元素 · {tpl.labelConfig.labelWidth}×{tpl.labelConfig.labelHeight}mm
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button
+                      className="toolbar-btn"
+                      style={{ fontSize: 11, padding: '4px 10px' }}
+                      onClick={() => { loadTemplateById(tpl.id); setShowTemplates(false); }}
+                    >
+                      加载
+                    </button>
+                    <button
+                      className="toolbar-btn danger"
+                      style={{ fontSize: 11, padding: '4px 10px' }}
+                      onClick={() => { deleteTemplate(tpl.id); setTemplates(loadTemplates()); }}
+                    >
+                      删
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+              <button className="toolbar-btn" onClick={() => setShowTemplates(false)}>关闭</button>
             </div>
           </div>
         </div>

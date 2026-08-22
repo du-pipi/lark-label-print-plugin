@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, type ReactNode, useCallback, useEffect, useRef } from 'react';
-import type { LabelItem, LabelConfig, Field, RecordData, TableCell, FieldDiag } from '../types';
+import type { LabelItem, LabelConfig, Field, RecordData, TableCell, FieldDiag, LabelTemplate } from '../types';
 import { defaultLabelConfig, mockFields, mockRecords } from '../mock/data';
 import { loadBitableData, onSelectionChange, onTableChange, isInFeishu, getSelectedRecordIds } from '../feishu/sdk';
 
@@ -11,20 +11,21 @@ interface AppState {
   items: LabelItem[];
   selectedItemId: string | null;
   labelConfig: LabelConfig;
-  isPrintMode: boolean;
   tableName: string;
   loading: boolean;
-  // 当前数据来源：feishu 真实数据 / mock 演示数据
   dataSource: 'feishu' | 'mock';
-  // 字段诊断（暴露飞书原始值结构，排查解析问题）
   diag: FieldDiag[];
-  // 取数错误信息（loadBitableData 抛错时记录，诊断面板显示）
   loadError: string;
-  // 飞书多维表格中当前勾选的记录 ID 列表（支持批量打印）
   batchRecordIds: string[];
+  // 撤销/重做历史栈
+  history: { items: LabelItem[]; labelConfig: LabelConfig }[];
+  historyIndex: number;
+  // 批量打印份数（每条记录打印几份）
+  printCopies: number;
 }
 
 const LS_KEY = 'lark-label-print-layout-v1';
+const LS_TPL_KEY = 'lark-label-print-templates-v1';
 
 interface PersistShape {
   items: LabelItem[];
@@ -50,6 +51,24 @@ function persist(state: AppState) {
   }
 }
 
+// ========== 模板管理 ==========
+export function loadTemplates(): LabelTemplate[] {
+  try {
+    const raw = localStorage.getItem(LS_TPL_KEY);
+    return raw ? (JSON.parse(raw) as LabelTemplate[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveTemplates(tpls: LabelTemplate[]): void {
+  try {
+    localStorage.setItem(LS_TPL_KEY, JSON.stringify(tpls));
+  } catch {
+    /* ignore */
+  }
+}
+
 const persisted = loadPersisted();
 
 const initialState: AppState = {
@@ -59,13 +78,15 @@ const initialState: AppState = {
   items: persisted.items ?? [],
   selectedItemId: null,
   labelConfig: persisted.labelConfig ?? defaultLabelConfig,
-  isPrintMode: false,
   tableName: '',
   loading: true,
   dataSource: 'mock',
   diag: [],
   loadError: '',
   batchRecordIds: [],
+  history: [],
+  historyIndex: -1,
+  printCopies: 1,
 };
 
 // ========== Action 定义 ==========
@@ -76,75 +97,112 @@ type Action =
   | { type: 'SELECT_ITEM'; id: string | null }
   | { type: 'MOVE_ITEM'; id: string; x: number; y: number }
   | { type: 'RESIZE_ITEM'; id: string; width: number; height: number }
+  | { type: 'DUPLICATE_ITEM'; id: string }
   | { type: 'CLEAR_ITEMS' }
   | { type: 'SET_LABEL_CONFIG'; patch: Partial<LabelConfig> }
   | { type: 'SELECT_RECORD'; id: string }
-  | { type: 'TOGGLE_PRINT_MODE'; value?: boolean }
   | { type: 'BRING_TO_FRONT'; id: string }
   | { type: 'SEND_TO_BACK'; id: string }
-  // 数据加载
   | { type: 'SET_BITABLE'; fields: Field[]; records: RecordData[]; tableName: string; dataSource: 'feishu' | 'mock'; diag: FieldDiag[]; loadError: string }
   | { type: 'SET_LOADING'; value: boolean }
-  | { type: 'SET_BATCH_RECORDS'; recordIds: string[] };
+  | { type: 'SET_BATCH_RECORDS'; recordIds: string[] }
+  | { type: 'SET_PRINT_COPIES'; value: number }
+  | { type: 'LOAD_TEMPLATE'; items: LabelItem[]; labelConfig: LabelConfig }
+  | { type: 'UNDO' }
+  | { type: 'REDO' };
+
+// 记录会改变 items/config 的操作（用于撤销栈）
+const HISTORY_ACTIONS = new Set(['ADD_ITEM', 'DELETE_ITEM', 'DUPLICATE_ITEM', 'CLEAR_ITEMS', 'MOVE_ITEM', 'RESIZE_ITEM', 'UPDATE_ITEM', 'LOAD_TEMPLATE']);
+
+function pushHistory(state: AppState): { items: LabelItem[]; labelConfig: LabelConfig }[] {
+  const snapshot = { items: state.items, labelConfig: state.labelConfig };
+  // 截断 redo 部分
+  const truncated = state.history.slice(0, state.historyIndex + 1);
+  const newHistory = [...truncated, snapshot];
+  // 限制历史栈大小 50
+  const trimmed = newHistory.length > 50 ? newHistory.slice(newHistory.length - 50) : newHistory;
+  return trimmed;
+}
 
 // ========== Reducer ==========
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
-    case 'ADD_ITEM':
+    case 'ADD_ITEM': {
+      const newItems = [...state.items, action.item];
+      return { ...state, items: newItems, selectedItemId: action.item.id, history: pushHistory(state), historyIndex: state.historyIndex + 1 };
+    }
+
+    case 'UPDATE_ITEM': {
+      const item = state.items.find((it) => it.id === action.id);
+      if (item?.locked) return state; // 锁定元素不可改
       return {
         ...state,
-        items: [...state.items, action.item],
-        selectedItemId: action.item.id,
+        items: state.items.map((it) => it.id === action.id ? { ...it, ...action.patch } : it),
+        history: pushHistory(state), historyIndex: state.historyIndex + 1,
       };
+    }
 
-    case 'UPDATE_ITEM':
-      return {
-        ...state,
-        items: state.items.map((it) =>
-          it.id === action.id ? { ...it, ...action.patch } : it
-        ),
-      };
-
-    case 'DELETE_ITEM':
+    case 'DELETE_ITEM': {
+      const item = state.items.find((it) => it.id === action.id);
+      if (item?.locked) return state; // 锁定元素不可删
       return {
         ...state,
         items: state.items.filter((it) => it.id !== action.id),
         selectedItemId: state.selectedItemId === action.id ? null : state.selectedItemId,
+        history: pushHistory(state), historyIndex: state.historyIndex + 1,
       };
+    }
 
     case 'SELECT_ITEM':
       return { ...state, selectedItemId: action.id };
 
-    case 'MOVE_ITEM':
+    case 'MOVE_ITEM': {
+      const item = state.items.find((it) => it.id === action.id);
+      if (item?.locked) return state;
       return {
         ...state,
-        items: state.items.map((it) =>
-          it.id === action.id ? { ...it, x: action.x, y: action.y } : it
-        ),
+        items: state.items.map((it) => it.id === action.id ? { ...it, x: action.x, y: action.y } : it),
+        history: pushHistory(state), historyIndex: state.historyIndex + 1,
       };
+    }
 
-    case 'RESIZE_ITEM':
+    case 'RESIZE_ITEM': {
+      const item = state.items.find((it) => it.id === action.id);
+      if (item?.locked) return state;
       return {
         ...state,
-        items: state.items.map((it) =>
-          it.id === action.id ? { ...it, width: action.width, height: action.height } : it
-        ),
+        items: state.items.map((it) => it.id === action.id ? { ...it, width: action.width, height: action.height } : it),
+        history: pushHistory(state), historyIndex: state.historyIndex + 1,
       };
+    }
+
+    case 'DUPLICATE_ITEM': {
+      const orig = state.items.find((it) => it.id === action.id);
+      if (!orig || orig.locked) return state;
+      const copy: LabelItem = {
+        ...orig,
+        id: `item_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        x: orig.x + 5,
+        y: orig.y + 5,
+        // 表格深拷贝
+        tableCells: orig.tableCells ? orig.tableCells.map(c => ({ ...c })) : undefined,
+      };
+      return {
+        ...state,
+        items: [...state.items, copy],
+        selectedItemId: copy.id,
+        history: pushHistory(state), historyIndex: state.historyIndex + 1,
+      };
+    }
 
     case 'CLEAR_ITEMS':
-      return { ...state, items: [], selectedItemId: null };
+      return { ...state, items: [], selectedItemId: null, history: pushHistory(state), historyIndex: state.historyIndex + 1 };
 
     case 'SET_LABEL_CONFIG':
-      return { ...state, labelConfig: { ...state.labelConfig, ...action.patch } };
+      return { ...state, labelConfig: { ...state.labelConfig, ...action.patch }, history: pushHistory(state), historyIndex: state.historyIndex + 1 };
 
     case 'SELECT_RECORD':
       return { ...state, selectedRecordId: action.id };
-
-    case 'TOGGLE_PRINT_MODE':
-      return {
-        ...state,
-        isPrintMode: action.value !== undefined ? action.value : !state.isPrintMode,
-      };
 
     case 'BRING_TO_FRONT': {
       const idx = state.items.findIndex((it) => it.id === action.id);
@@ -183,6 +241,33 @@ function reducer(state: AppState, action: Action): AppState {
     case 'SET_BATCH_RECORDS':
       return { ...state, batchRecordIds: action.recordIds };
 
+    case 'SET_PRINT_COPIES':
+      return { ...state, printCopies: action.value };
+
+    case 'LOAD_TEMPLATE':
+      return {
+        ...state,
+        items: action.items.map(it => ({ ...it, id: `item_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, tableCells: it.tableCells?.map(c => ({ ...c })) })),
+        labelConfig: action.labelConfig,
+        selectedItemId: null,
+        history: pushHistory(state), historyIndex: state.historyIndex + 1,
+      };
+
+    case 'UNDO': {
+      if (state.historyIndex < 0) return state;
+      const prev = state.history[state.historyIndex];
+      if (!prev) return state;
+      return { ...state, items: prev.items, labelConfig: prev.labelConfig, historyIndex: state.historyIndex - 1 };
+    }
+
+    case 'REDO': {
+      const nextIdx = state.historyIndex + 1;
+      if (nextIdx >= state.history.length) return state;
+      const next = state.history[nextIdx];
+      if (!next) return state;
+      return { ...state, items: next.items, labelConfig: next.labelConfig, historyIndex: nextIdx };
+    }
+
     default:
       return state;
   }
@@ -192,21 +277,25 @@ function reducer(state: AppState, action: Action): AppState {
 interface AppContextValue {
   state: AppState;
   dispatch: React.Dispatch<Action>;
-  // 便捷方法
   addItemFromField: (field: Field, x?: number, y?: number) => void;
   addStaticText: (x?: number, y?: number) => void;
   addTable: (x?: number, y?: number) => void;
+  duplicateSelected: () => void;
+  undo: () => void;
+  redo: () => void;
+  saveTemplate: (name: string) => void;
+  loadTemplateById: (id: string) => void;
+  deleteTemplate: (id: string) => void;
   getFieldValue: (fieldId: string, recordId?: string) => string | number;
   reloadBitable: () => Promise<void>;
   refreshSelection: () => Promise<void>;
+  selectAllRecords: () => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
 
-let idCounter = 0;
 function genId() {
-  idCounter += 1;
-  return `item_${Date.now()}_${idCounter}`;
+  return `item_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function createDefaultItem(field: Field, x: number, y: number): LabelItem {
@@ -215,80 +304,38 @@ function createDefaultItem(field: Field, x: number, y: number): LabelItem {
     fieldId: field.id,
     fieldName: field.name,
     type: field.type,
-    x,
-    y,
+    x, y,
     width: field.type === 'image' || field.type === 'qrcode' ? 25 : 40,
     height: field.type === 'image' || field.type === 'qrcode' ? 25 : 8,
-    fontSize: 10,
-    fontWeight: 'normal',
-    fontStyle: 'normal',
-    color: '#000000',
-    textAlign: 'left',
-    verticalAlign: 'middle',
-    lineHeight: 1.3,
-    borderStyle: 'none',
-    borderWidth: 1,
-    borderColor: '#000000',
-    borderRadius: 0,
-    padding: 2,
-    backgroundColor: 'transparent',
-    objectFit: 'contain',
+    fontSize: 10, fontWeight: 'normal', fontStyle: 'normal', color: '#000000',
+    textAlign: 'left', verticalAlign: 'middle', lineHeight: 1.3,
+    borderStyle: 'none', borderWidth: 1, borderColor: '#000000',
+    borderRadius: 0, padding: 2, backgroundColor: 'transparent', objectFit: 'contain',
   };
-
-  if (field.type === 'barcode') {
-    base.width = 40;
-    base.height = 15;
-    base.fontSize = 8;
-  }
-  if (field.type === 'number' && field.name.includes('价格')) {
-    base.fontSize = 16;
-    base.fontWeight = 'bold';
-    base.width = 30;
-    base.height = 10;
-  }
+  if (field.type === 'barcode') { base.width = 40; base.height = 15; base.fontSize = 8; }
   return base;
 }
 
-// 创建默认表格元素（默认 3 行 2 列）
-function createTableItem(x: number, y: number): LabelItem {
+// 创建默认表格元素——置底、居中、锁定
+function createTableItem(labelConfig: LabelConfig): LabelItem {
   const rows = 3;
   const cols = 2;
-  const cells: TableCell[] = Array.from({ length: rows * cols }, () => ({
-    fieldId: null,
-    staticText: '',
-    prefix: '',
-  }));
+  const cells: TableCell[] = Array.from({ length: rows * cols }, () => ({ fieldId: null, staticText: '', prefix: '' }));
+  // 默认占满整个标签，居中（x=0,y=0,width=labelWidth,height=labelHeight）
   return {
     id: genId(),
-    fieldId: '',
-    fieldName: '表格',
-    type: 'table',
-    x,
-    y,
-    width: 50,
-    height: 30,
-    fontSize: 9,
-    fontWeight: 'normal',
-    fontStyle: 'normal',
-    color: '#000000',
-    textAlign: 'left',
-    verticalAlign: 'middle',
-    lineHeight: 1.2,
-    borderStyle: 'none',
-    borderWidth: 1,
-    borderColor: '#000000',
-    borderRadius: 0,
-    padding: 2,
-    backgroundColor: 'transparent',
-    objectFit: 'contain',
-    tableRows: rows,
-    tableCols: cols,
-    tableCells: cells,
-    tableShowBorder: true,
-    tableHeader: false,
-    tableFontSize: 9,
-    tableBorderWidth: 0.5,
-    tableColWidths: [1, 1], // 默认两列等宽
+    fieldId: '', fieldName: '表格', type: 'table',
+    x: 0, y: 0,
+    width: labelConfig.labelWidth,
+    height: labelConfig.labelHeight,
+    fontSize: 9, fontWeight: 'normal', fontStyle: 'normal', color: '#000000',
+    textAlign: 'left', verticalAlign: 'middle', lineHeight: 1.2,
+    borderStyle: 'none', borderWidth: 1, borderColor: '#000000',
+    borderRadius: 0, padding: 2, backgroundColor: 'transparent', objectFit: 'contain',
+    tableRows: rows, tableCols: cols, tableCells: cells,
+    tableShowBorder: true, tableHeader: false, tableFontSize: 9, tableBorderWidth: 0.5,
+    tableColWidths: [1, 1],
+    locked: true, // 默认锁定：不可移动/缩放/删除
   };
 }
 
@@ -305,36 +352,61 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addStaticText = useCallback((x = 5, y = 5) => {
     const item: LabelItem = {
       ...createDefaultItem({ id: 'static', name: '静态文本', type: 'text' }, x, y),
-      isStatic: true,
-      staticText: '双击编辑文本',
-      width: 30,
-      height: 8,
+      isStatic: true, staticText: '双击编辑文本', width: 30, height: 8,
     };
     dispatch({ type: 'ADD_ITEM', item });
   }, []);
 
-  const addTable = useCallback((x = 5, y = 5) => {
-    const item = createTableItem(x, y);
+  const addTable = useCallback(() => {
+    const item = createTableItem(stateRef.current.labelConfig);
     dispatch({ type: 'ADD_ITEM', item });
   }, []);
 
-  const getFieldValue = useCallback(
-    (fieldId: string, recordId?: string) => {
-      const s = stateRef.current;
-      if (!fieldId) return '';
-      // 优先用指定 recordId（批量模式）；否则用当前选中记录；匹配不到回退第一条
-      const rid = recordId || s.selectedRecordId;
-      const rec = s.records.find((r) => r.id === rid) || s.records[0];
-      if (!rec) return '';
-      const f = s.fields.find((x) => x.id === fieldId);
-      const v = rec.fields[fieldId];
-      if (v !== undefined && v !== '') return v;
-      // 双键兜底：按字段名取值（飞书返回键为 name 时）
-      if (f && rec.fields[f.name] !== undefined) return rec.fields[f.name];
-      return '';
-    },
-    []
-  );
+  const duplicateSelected = useCallback(() => {
+    const id = stateRef.current.selectedItemId;
+    if (id) dispatch({ type: 'DUPLICATE_ITEM', id });
+  }, []);
+
+  const undo = useCallback(() => dispatch({ type: 'UNDO' }), []);
+  const redo = useCallback(() => dispatch({ type: 'REDO' }), []);
+
+  const saveTemplate = useCallback((name: string) => {
+    const s = stateRef.current;
+    const tpl: LabelTemplate = {
+      id: `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      name,
+      items: s.items,
+      labelConfig: s.labelConfig,
+      createdAt: Date.now(),
+    };
+    const existing = loadTemplates();
+    const updated = [...existing, tpl];
+    saveTemplates(updated);
+  }, []);
+
+  const loadTemplateById = useCallback((id: string) => {
+    const tpls = loadTemplates();
+    const tpl = tpls.find(t => t.id === id);
+    if (tpl) dispatch({ type: 'LOAD_TEMPLATE', items: tpl.items, labelConfig: tpl.labelConfig });
+  }, []);
+
+  const deleteTemplate = useCallback((id: string) => {
+    const existing = loadTemplates();
+    saveTemplates(existing.filter(t => t.id !== id));
+  }, []);
+
+  const getFieldValue = useCallback((fieldId: string, recordId?: string) => {
+    const s = stateRef.current;
+    if (!fieldId) return '';
+    const rid = recordId || s.selectedRecordId;
+    const rec = s.records.find((r) => r.id === rid) || s.records[0];
+    if (!rec) return '';
+    const f = s.fields.find((x) => x.id === fieldId);
+    const v = rec.fields[fieldId];
+    if (v !== undefined && v !== '') return v;
+    if (f && rec.fields[f.name] !== undefined) return rec.fields[f.name];
+    return '';
+  }, []);
 
   const refreshSelection = useCallback(async () => {
     if (!isInFeishu()) return;
@@ -342,9 +414,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_BATCH_RECORDS', recordIds: ids });
   }, []);
 
+  const selectAllRecords = useCallback(() => {
+    const s = stateRef.current;
+    dispatch({ type: 'SET_BATCH_RECORDS', recordIds: s.records.map(r => r.id) });
+  }, []);
+
   const reloadBitable = useCallback(async () => {
     if (!isInFeishu()) {
-      // 非飞书环境：保留 mock 演示数据，方便本地开发与预览
       dispatch({ type: 'SET_BITABLE', fields: mockFields, records: mockRecords, tableName: '演示数据（未接入飞书）', dataSource: 'mock', diag: [], loadError: '' });
       return;
     }
@@ -354,7 +430,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const errMsg = data.records.length === 0 ? '记录数为 0：getRecordsByPage 可能未返回数据或被权限限制' : '';
       dispatch({ type: 'SET_BITABLE', fields: data.fields, records: data.records, tableName: data.tableName, dataSource: 'feishu', diag: data.diag, loadError: errMsg });
     } catch (err) {
-      // 保留错误信息到诊断面板，不再静默吞掉
       const errMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
       console.error('[飞书SDK] 读取数据失败：', err);
       dispatch({ type: 'SET_BITABLE', fields: mockFields, records: mockRecords, tableName: '读取失败（回退演示数据）', dataSource: 'mock', diag: [], loadError: errMsg });
@@ -364,35 +439,43 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // 首次加载 + 监听选中/表切换
   useEffect(() => {
     reloadBitable();
-
     let offSel: (() => void) | undefined;
     let offTable: (() => void) | undefined;
     if (isInFeishu()) {
       onSelectionChange((recordIds) => {
-        // 更新批量勾选列表
         dispatch({ type: 'SET_BATCH_RECORDS', recordIds });
-        // 单选时同步预览记录
-        if (recordIds.length === 1) {
-          dispatch({ type: 'SELECT_RECORD', id: recordIds[0] });
-        }
+        if (recordIds.length === 1) dispatch({ type: 'SELECT_RECORD', id: recordIds[0] });
       }).then((off) => { offSel = off; }).catch(() => {});
       onTableChange(() => { reloadBitable(); }).then((off) => { offTable = off; }).catch(() => {});
-      // 初始获取一次选中状态
       refreshSelection();
     }
-    return () => {
-      offSel?.();
-      offTable?.();
-    };
-  }, [reloadBitable]);
+    return () => { offSel?.(); offTable?.(); };
+  }, [reloadBitable, refreshSelection]);
 
-  // 布局持久化（仅 items + labelConfig，不存数据）
+  // 布局持久化
+  useEffect(() => { persist(stateRef.current); }, [state.items, state.labelConfig]);
+
+  // 全局快捷键：Ctrl+Z 撤销 / Ctrl+Shift+Z 或 Ctrl+Y 重做 / Ctrl+D 复制
   useEffect(() => {
-    persist(stateRef.current);
-  }, [state.items, state.labelConfig]);
+    const handleKey = (e: KeyboardEvent) => {
+      // 批量预览模式不响应快捷键
+      if (stateRef.current.batchRecordIds.length > 1) return;
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+        else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') { e.preventDefault(); redo(); }
+        else if (e.key === 'd') { e.preventDefault(); duplicateSelected(); }
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [undo, redo, duplicateSelected]);
 
   return (
-    <AppContext.Provider value={{ state, dispatch, addItemFromField, addStaticText, addTable, getFieldValue, reloadBitable, refreshSelection }}>
+    <AppContext.Provider value={{
+      state, dispatch, addItemFromField, addStaticText, addTable,
+      duplicateSelected, undo, redo, saveTemplate, loadTemplateById, deleteTemplate,
+      getFieldValue, reloadBitable, refreshSelection, selectAllRecords,
+    }}>
       {children}
     </AppContext.Provider>
   );

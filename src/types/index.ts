@@ -48,6 +48,8 @@ export interface LabelItem {
   // 静态文本（非字段绑定）
   isStatic?: boolean;
   staticText?: string;
+  // 锁定：不可移动/缩放/删除（如置底表格）
+  locked?: boolean;
   // 表格元素特有
   tableRows?: number;
   tableCols?: number;
@@ -95,4 +97,13 @@ export interface FieldDiag {
 export interface LabelPreset {
   name: string;
   config: Partial<LabelConfig>;
+}
+
+// 自定义模板（保存的排版方案）
+export interface LabelTemplate {
+  id: string;
+  name: string;
+  items: LabelItem[];
+  labelConfig: LabelConfig;
+  createdAt: number;
 }

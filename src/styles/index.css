@@ -377,7 +377,7 @@ input, select {
 
 /* ========== 右侧属性面板 ========== */
 .property-panel {
-  width: 260px;
+  width: 100%;
   background: #fff;
   border-left: 1px solid #e5e6eb;
   display: flex;
@@ -604,6 +604,18 @@ input, select {
     page-break-after: auto;
   }
 
+  /* 批量模式：每个标签一页 */
+  .batch-label-page {
+    box-shadow: none !important;
+    border: none !important;
+    page-break-after: always;
+    page-break-inside: avoid;
+  }
+
+  .batch-label-page:last-child {
+    page-break-after: auto;
+  }
+
   .label-cell {
     border: none !important;
   }
@@ -664,4 +676,57 @@ input, select {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #86909c;
+}
+
+/* ========== 锁定元素样式 ========== */
+.label-item.locked {
+  cursor: default !important;
+}
+
+.label-item.locked:hover {
+  outline: 1px dashed #86909c;
+}
+
+/* ========== 字段搜索框 ========== */
+.field-search {
+  border: 1px solid #e5e6eb !important;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.field-search:focus {
+  border-color: #165dff !important;
+  outline: none;
+}
+
+/* ========== 属性面板可拖宽 ========== */
+.panel-resizer {
+  width: 4px;
+  background: transparent;
+  cursor: col-resize;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+}
+
+.panel-resizer:hover,
+.panel-resizer.dragging {
+  background: #165dff;
+}
+
+/* ========== 撤销/重做按钮 ========== */
+.toolbar-btn:disabled {
+  cursor: not-allowed;
+}
+
+/* ========== 批量预览标签页 ========== */
+.batch-label-page {
+  position: relative;
+}
+
+@media print {
+  .batch-label-page {
+    border: none !important;
+    margin: 0 !important;
+  }
 }
