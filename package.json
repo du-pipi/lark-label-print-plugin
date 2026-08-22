@@ -1,0 +1,28 @@
+{
+  "name": "lark-label-print-plugin",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "output": "dist",
+  "description": "飞书多维表格商品标签自定义排版打印插件（接入真实 SDK + 真条码/二维码 + 一页一标签）",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@lark-base-open/js-sdk": "^1.0.2",
+    "jsbarcode": "^3.12.3",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.4"
+  }
+}

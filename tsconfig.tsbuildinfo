@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/components/barcode.tsx","./src/components/canvas.tsx","./src/components/fieldpanel.tsx","./src/components/labelitemview.tsx","./src/components/propertypanel.tsx","./src/components/toolbar.tsx","./src/feishu/sdk.ts","./src/mock/data.ts","./src/store/appcontext.tsx","./src/types/index.ts","./src/utils/index.ts"],"version":"5.9.3"}
