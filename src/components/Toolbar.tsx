@@ -44,9 +44,10 @@ export default function Toolbar() {
 
     // 直接调用系统打印对话框，打印当前页面（所见即所得）
     // @media print CSS 自动隐藏编辑 UI，只保留标签内容
+    // 留足 @page 尺寸生效时间，避免打印时标签被缩放裁切
     setTimeout(() => {
       window.print();
-    }, 50);
+    }, 150);
   };
 
   const handleClear = () => {
@@ -66,11 +67,13 @@ export default function Toolbar() {
 
   const selectedRecord = records.find((r) => r.id === selectedRecordId);
 
-  // 记录下拉显示名：优先用第一个文本/数字字段的值，否则用 id
+  // 预览记录下拉显示名：优先按「角色名称」字段，找不到则回退首个文本/数字字段
+  const roleField =
+    state.fields.find((f) => f.name.includes('角色名称')) ||
+    state.fields.find((f) => f.type === 'text' || f.type === 'number');
   const recordLabel = (r: typeof records[number]) => {
-    const firstText = state.fields.find((f) => f.type === 'text' || f.type === 'number');
-    const v = firstText ? r.fields[firstText.id] : undefined;
-    return (v !== undefined && v !== '') ? String(v) : r.id;
+    const v = roleField ? (r.fields[roleField.id] ?? r.fields[roleField.name]) : undefined;
+    return v !== undefined && v !== '' ? String(v) : r.id;
   };
 
   return (
@@ -79,19 +82,17 @@ export default function Toolbar() {
         <div className="toolbar-left">
           <span className="toolbar-title">🏷️ 数据标签打印</span>
           {state.tableName && (
-            <span style={{ fontSize: 11, color: '#86909c' }}>· {state.tableName}</span>
+            <span className="tb-chip">{state.tableName}</span>
           )}
           {state.dataSource === 'feishu' && (
-            <span style={{ fontSize: 11, color: '#00b42a' }}>· 已接入飞书</span>
+            <span className="tb-chip tb-chip-green">已接入飞书</span>
           )}
           {state.dataSource === 'mock' && (
-            <span style={{ fontSize: 11, color: '#ff7d00' }}>· 演示数据</span>
+            <span className="tb-chip tb-chip-orange">演示数据</span>
           )}
-          <span style={{ fontSize: 11, color: '#86909c' }}>· 记录 {records.length} 条</span>
+          <span className="tb-chip">记录 {records.length} 条</span>
           {isBatchMode && (
-            <span style={{ fontSize: 11, color: '#165dff', fontWeight: 'bold' }}>
-              · 已选中 {batchRecordIds.length} 条
-            </span>
+            <span className="tb-chip tb-chip-blue">已选中 {batchRecordIds.length} 条</span>
           )}
           <div className="toolbar-divider" />
 
@@ -107,7 +108,7 @@ export default function Toolbar() {
           {/* 批量选择控制 */}
           {!isBatchMode ? (
             <div className="record-selector">
-              <label>预览记录:</label>
+              <label className="tb-label">预览记录</label>
               <select
                 className="toolbar-select"
                 value={selectedRecordId}
@@ -119,7 +120,7 @@ export default function Toolbar() {
               </select>
             </div>
           ) : (
-            <span style={{ fontSize: 12, color: '#165dff' }}>批量预览中</span>
+            <span className="tb-chip tb-chip-blue">批量预览中</span>
           )}
           <button className="toolbar-btn" onClick={selectAllRecords} title="全选所有记录" style={{ fontSize: 11, padding: '2px 8px' }}>全选</button>
           <button className="toolbar-btn" onClick={clearBatch} title="清空选择" style={{ fontSize: 11, padding: '2px 8px' }}>清空</button>
@@ -167,7 +168,7 @@ export default function Toolbar() {
           <div
             style={{
               background: '#fff',
-              borderRadius: 12,
+              borderRadius: 8,
               padding: 24,
               width: 480,
               maxHeight: '80vh',

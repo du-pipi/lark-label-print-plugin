@@ -86,71 +86,16 @@ export default function FieldPanel() {
           })
         )}
       </div>
-      <button className="add-static-btn" onClick={() => addStaticText()}>+ 添加静态文本</button>
-      <button className="add-static-btn" onClick={() => addTable()} style={{ marginTop: 0 }}>+ 添加表格</button>
-
-      {/* 字段诊断面板：任何情况都显示，暴露飞书原始值结构与取数错误，定位"字段名显示但值取不到"问题 */}
-      <div style={{ marginTop: 8, borderTop: '1px solid #e5e6eb', paddingTop: 8 }}>
-        <div style={{ fontSize: 11, color: '#86909c', marginBottom: 4 }}>
-          <div>数据源: <b style={{ color: state.dataSource === 'feishu' ? '#009a29' : '#ff7d00' }}>{state.dataSource === 'feishu' ? '飞书真实数据' : (state.tableName.includes('演示') ? 'Mock 演示' : '未知/回退')}</b></div>
-          <div>记录数: <b style={{ color: state.records.length > 0 ? '#009a29' : '#f53f3f' }}>{state.records.length}</b> · 字段数: <b>{state.fields.length}</b></div>
-          {state.loadError && (
-            <div style={{ color: '#f53f3f', marginTop: 4, wordBreak: 'break-all' }}>
-              ⚠️ {state.loadError}
-            </div>
-          )}
-          {state.dataSource === 'feishu' && (
-            <div style={{ marginTop: 2 }}>
-              选中更新: <b style={{ color: state.selectionChangeCount > 0 ? '#009a29' : '#f53f3f' }}>{state.selectionChangeCount}</b> 次
-              · 当前选中: <b style={{ color: state.batchRecordIds.length > 0 ? '#165dff' : '#f53f3f' }}>{state.batchRecordIds.length}</b> 条
-            </div>
-          )}
-        </div>
-        {(state.diag.length > 0 || state.loading) && (
-          <details>
-            <summary style={{ fontSize: 12, color: '#4e5969', cursor: 'pointer', userSelect: 'none' }}>
-              🔍 字段诊断{state.diag.length > 0 ? `（${state.diag.length} 个 · 空值 ${state.diag.filter((d) => d.isEmpty).length} 个）` : '（加载中…）'}
-            </summary>
-            <div style={{ maxHeight: 320, overflowY: 'auto', marginTop: 6 }}>
-              {state.diag.map((d, i) => (
-                <div
-                  key={i}
-                  style={{
-                    fontSize: 11,
-                    padding: '4px 6px',
-                    marginBottom: 3,
-                    background: d.isEmpty ? '#fff7e8' : '#f7f8fa',
-                    borderLeft: `3px solid ${d.isEmpty ? '#ff7d00' : '#00b42a'}`,
-                    borderRadius: 3,
-                  }}
-                >
-                  <div style={{ fontWeight: 'bold', color: '#1d2129' }}>
-                    {d.name}{' '}
-                    <span style={{ color: '#86909c', fontWeight: 'normal' }}>
-                      · {d.feishuTypeName}（type={d.feishuTypeId}）
-                    </span>
-                  </div>
-                  <div style={{ color: '#4e5969', marginTop: 2, wordBreak: 'break-all' }}>
-                    <span style={{ color: '#86909c' }}>原始:</span>{' '}
-                    <code>{safeStringify(d.rawValue)}</code>
-                  </div>
-                  <div style={{ color: '#4e5969' }}>
-                    <span style={{ color: '#86909c' }}>解析:</span>{' '}
-                    <span
-                      style={{
-                        color: d.isEmpty ? '#f53f3f' : '#009a29',
-                        fontWeight: d.isEmpty ? 'normal' : 'bold',
-                      }}
-                    >
-                      {d.isEmpty ? '（空）' : String(d.parsedValue)}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </details>
-        )}
+      {/* 添加元素：表格在上（醒目蓝底），静态文本在下；带底色 + 底边距，避免贴底看不见 */}
+      <div className="add-actions">
+        <button className="add-btn add-btn-table" onClick={addTable}>+ 添加表格</button>
+        <button className="add-btn add-btn-static" onClick={addStaticText}>+ 添加静态文本</button>
       </div>
+
+      {/* 仅在真实取数出错时提示，正常工作不展示任何诊断信息 */}
+      {state.loadError && (
+        <div className="rp-loaderr">{state.loadError}</div>
+      )}
     </div>
   );
 }

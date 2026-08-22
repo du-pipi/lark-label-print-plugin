@@ -79,9 +79,9 @@ export default function Canvas() {
   return (
     <div className="canvas-area" ref={canvasRef} onClick={handleCanvasClick}>
       <div className="canvas-wrapper">
-        {/* 批量预览提示 */}
+        {/* 批量预览提示（仅屏幕显示，打印时隐藏） */}
         {isBatchMode && (
-          <div style={{ marginBottom: 16, padding: '8px 12px', background: '#e8f3ff', borderRadius: 8, fontSize: 12, color: '#165dff' }}>
+          <div className="no-print" style={{ marginBottom: 16, padding: '8px 12px', background: '#e8f3ff', borderRadius: 8, fontSize: 12, color: '#165dff' }}>
             📋 批量预览：{batchRecordIds.length > 0 ? batchRecordIds.length : 1} 条记录 × {printCopies} 份 = {(batchRecordIds.length > 0 ? batchRecordIds.length : 1) * printCopies} 个标签。点击「🖨️ 批量打印」输出全部。
           </div>
         )}
@@ -112,7 +112,7 @@ export default function Canvas() {
                 pageBreakAfter: 'always' as React.CSSProperties['pageBreakAfter'],
               }}
             >
-              <div style={{ position: 'absolute', top: -16, left: 0, fontSize: 10, color: '#86909c' }}>
+              <div className="no-print" style={{ position: 'absolute', top: -16, left: 0, fontSize: 10, color: '#86909c' }}>
                 #{batchIdx + 1}{printCopies > 1 ? ` (第${copyIdx + 1}份)` : ''}
               </div>
               {items.map((item) => (
