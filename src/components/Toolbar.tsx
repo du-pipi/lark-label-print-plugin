@@ -4,7 +4,7 @@ import { labelPresets } from '../mock/data';
 import type { LabelConfig, LabelTemplate } from '../types';
 
 export default function Toolbar() {
-  const { state, dispatch, undo, redo, saveTemplate, loadTemplateById, deleteTemplate, selectAllRecords, refreshSelection } = useApp();
+  const { state, dispatch, undo, redo, saveTemplate, loadTemplateById, deleteTemplate, selectAllRecords, clearBatch } = useApp();
   const { labelConfig, records, selectedRecordId, items, batchRecordIds } = state;
   const [showSettings, setShowSettings] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -122,7 +122,7 @@ export default function Toolbar() {
             <span style={{ fontSize: 12, color: '#165dff' }}>批量预览中</span>
           )}
           <button className="toolbar-btn" onClick={selectAllRecords} title="全选所有记录" style={{ fontSize: 11, padding: '2px 8px' }}>全选</button>
-          <button className="toolbar-btn" onClick={() => { dispatch({ type: 'SET_BATCH_RECORDS', recordIds: [] }); refreshSelection(); }} title="清空选择" style={{ fontSize: 11, padding: '2px 8px' }}>清空</button>
+          <button className="toolbar-btn" onClick={clearBatch} title="清空选择" style={{ fontSize: 11, padding: '2px 8px' }}>清空</button>
         </div>
 
         <div className="toolbar-right">

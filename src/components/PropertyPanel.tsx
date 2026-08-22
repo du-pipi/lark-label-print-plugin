@@ -67,19 +67,12 @@ export default function PropertyPanel() {
         </span>
       </div>
 
-      {/* 锁定提示 + 解锁按钮 */}
-      {selectedItem.locked && (
-        <div className="property-section" style={{ background: '#fff7e8', borderBottom: '1px solid #ffd4a8' }}>
-          <div style={{ fontSize: 12, color: '#ff7d00', marginBottom: 6 }}>
-            🔒 此元素已锁定（置底表格，不可移动/缩放/删除）
+      {/* 位置锁定提示（只提示，不禁用编辑） */}
+      {selectedItem.lockedPosition && (
+        <div className="property-section" style={{ background: '#f2f3f5', borderBottom: '1px solid #e5e6eb', padding: '6px 12px' }}>
+          <div style={{ fontSize: 11, color: '#86909c' }}>
+            📌 位置已锁定（距边界 2mm 固定），可自由编辑行列数/单元格/样式
           </div>
-          <button
-            className="toolbar-btn"
-            style={{ fontSize: 11, padding: '4px 10px' }}
-            onClick={() => update({ locked: false })}
-          >
-            🔓 解锁（解锁后可自由调整）
-          </button>
         </div>
       )}
 
@@ -93,7 +86,7 @@ export default function PropertyPanel() {
             className="property-input"
             value={selectedItem.x}
             step={0.5}
-            disabled={!!selectedItem.locked}
+            disabled={!!selectedItem.lockedPosition}
             onChange={(e) => update({ x: parseFloat(e.target.value) || 0 })}
           />
           <span className="property-label">Y (mm)</span>
@@ -102,7 +95,7 @@ export default function PropertyPanel() {
             className="property-input"
             value={selectedItem.y}
             step={0.5}
-            disabled={!!selectedItem.locked}
+            disabled={!!selectedItem.lockedPosition}
             onChange={(e) => update({ y: parseFloat(e.target.value) || 0 })}
           />
         </div>
@@ -114,7 +107,6 @@ export default function PropertyPanel() {
             value={selectedItem.width}
             step={0.5}
             min={5}
-            disabled={!!selectedItem.locked}
             onChange={(e) => update({ width: parseFloat(e.target.value) || 5 })}
           />
           <span className="property-label">高 (mm)</span>
@@ -124,7 +116,6 @@ export default function PropertyPanel() {
             value={selectedItem.height}
             step={0.5}
             min={3}
-            disabled={!!selectedItem.locked}
             onChange={(e) => update({ height: parseFloat(e.target.value) || 3 })}
           />
         </div>
@@ -213,6 +204,14 @@ export default function PropertyPanel() {
               <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                 <input type="checkbox" checked={!!selectedItem.tableHeader} onChange={(e) => update({ tableHeader: e.target.checked })} /> 首行表头
               </label>
+            </div>
+            <div className="property-row">
+              <span className="property-label">内边距</span>
+              <span style={{ fontSize: 11, color: '#86909c' }}>上下</span>
+              <input type="number" className="property-input" value={selectedItem.tableCellPaddingV ?? 2} min={0} max={10} step={0.5} onChange={(e) => update({ tableCellPaddingV: parseFloat(e.target.value) ?? 2 })} style={{ width: 45 }} />
+              <span style={{ fontSize: 11, color: '#86909c' }}>左右</span>
+              <input type="number" className="property-input" value={selectedItem.tableCellPaddingH ?? 3} min={0} max={10} step={0.5} onChange={(e) => update({ tableCellPaddingH: parseFloat(e.target.value) ?? 3 })} style={{ width: 45 }} />
+              <span style={{ fontSize: 11, color: '#86909c' }}>px</span>
             </div>
             <div className="property-row">
               <span className="property-label">边框宽</span>

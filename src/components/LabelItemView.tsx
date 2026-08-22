@@ -23,7 +23,7 @@ export default function LabelItemView({ item, scale, isSelected, onSelect, recor
   const dragStart = useRef({ x: 0, y: 0, itemX: 0, itemY: 0 });
   const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
 
-  const isLocked = !!item.locked;
+  const isLockedPosition = !!item.lockedPosition;
 
   // 元素位置（mm -> px * scale）
   const style: React.CSSProperties = {
@@ -51,9 +51,9 @@ export default function LabelItemView({ item, scale, isSelected, onSelect, recor
     backgroundColor: item.backgroundColor === 'transparent' ? undefined : item.backgroundColor,
   };
 
-  // 拖动元素
+  // 拖动元素（位置锁定时不可拖）
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (readOnly || isLocked) return;
+    if (readOnly || isLockedPosition) return;
     if ((e.target as HTMLElement).classList.contains('resize-handle')) return;
     e.stopPropagation();
     onSelect();
@@ -139,9 +139,9 @@ export default function LabelItemView({ item, scale, isSelected, onSelect, recor
     };
   }, [isDragging, item.id, item.width, item.height, scale, dispatch, state.items, state.labelConfig]);
 
-  // 调整大小
+  // 调整大小（位置锁定不锁缩放，表格可调大小）
   const handleResizeStart = (e: React.MouseEvent) => {
-    if (readOnly || isLocked) return;
+    if (readOnly) return;
     e.stopPropagation();
     onSelect();
     setIsResizing(true);
@@ -245,7 +245,7 @@ export default function LabelItemView({ item, scale, isSelected, onSelect, recor
                   alignItems: item.verticalAlign === 'middle' ? 'center' : item.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start',
                   justifyContent:
                     item.textAlign === 'center' ? 'center' : item.textAlign === 'right' ? 'flex-end' : 'flex-start',
-                  padding: `${2 * scale}px ${3 * scale}px`,
+                  padding: `${(item.tableCellPaddingV ?? 2) * scale}px ${(item.tableCellPaddingH ?? 3) * scale}px`,
                   overflow: 'hidden',
                   wordBreak: 'break-all',
                 }}
@@ -310,7 +310,7 @@ export default function LabelItemView({ item, scale, isSelected, onSelect, recor
   return (
     <div
       ref={itemRef}
-      className={`label-item ${isSelected ? 'selected' : ''} ${isLocked ? 'locked' : ''}`}
+      className={`label-item ${isSelected ? 'selected' : ''} ${isLockedPosition ? 'locked-position' : ''}`}
       style={style}
       onMouseDown={handleMouseDown}
     >
@@ -330,15 +330,15 @@ export default function LabelItemView({ item, scale, isSelected, onSelect, recor
           pointerEvents: 'none', zIndex: 9999,
         }} />
       )}
-      {/* 锁定标记 */}
-      {isLocked && (
+      {/* 位置锁定标记 */}
+      {isLockedPosition && (
         <div style={{
           position: 'absolute', top: 2, right: 2, fontSize: 8, color: '#86909c',
           background: 'rgba(255,255,255,0.8)', borderRadius: 2, padding: '0 2px',
           pointerEvents: 'none',
-        }}>🔒</div>
+        }}>📌</div>
       )}
-      {isSelected && !readOnly && !isLocked && (
+      {isSelected && !readOnly && (
         <>
           <div className="resize-handle e" onMouseDown={handleResizeStart} />
           <div className="resize-handle s" onMouseDown={handleResizeStart} />

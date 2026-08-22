@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../store/AppContext';
 import type { Field, FieldType } from '../types';
+import RecordPicker from './RecordPicker';
 
 const typeLabels: Record<FieldType, string> = {
   text: '文',
@@ -34,20 +35,23 @@ export default function FieldPanel() {
 
   return (
     <div className="field-panel no-print">
+      {/* 记录选择器：插件内勾选记录（飞书 SDK 不支持多选） */}
+      <RecordPicker />
+
       <div className="panel-header">
         <span>字段列表</span>
-        <span style={{ fontSize: 11, color: '#86909c' }}>{state.fields.length} 个</span>
+        <input
+          type="text"
+          className="field-search-inline"
+          placeholder="🔍搜索"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{
+            fontSize: 11, width: 80, padding: '1px 4px',
+            border: '1px solid #e5e6eb', borderRadius: 3, marginLeft: 'auto',
+          }}
+        />
       </div>
-
-      {/* 字段搜索框 */}
-      <input
-        type="text"
-        className="property-input field-search"
-        placeholder="🔍 搜索字段..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        style={{ width: '100%', marginBottom: 8, padding: '4px 8px' }}
-      />
 
       <div className="field-list">
         {filteredFields.length === 0 ? (
@@ -93,6 +97,12 @@ export default function FieldPanel() {
           {state.loadError && (
             <div style={{ color: '#f53f3f', marginTop: 4, wordBreak: 'break-all' }}>
               ⚠️ {state.loadError}
+            </div>
+          )}
+          {state.dataSource === 'feishu' && (
+            <div style={{ marginTop: 2 }}>
+              选中更新: <b style={{ color: state.selectionChangeCount > 0 ? '#009a29' : '#f53f3f' }}>{state.selectionChangeCount}</b> 次
+              · 当前选中: <b style={{ color: state.batchRecordIds.length > 0 ? '#165dff' : '#f53f3f' }}>{state.batchRecordIds.length}</b> 条
             </div>
           )}
         </div>

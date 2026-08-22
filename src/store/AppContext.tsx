@@ -17,6 +17,8 @@ interface AppState {
   diag: FieldDiag[];
   loadError: string;
   batchRecordIds: string[];
+  // onSelectionChange 触发计数（诊断用）
+  selectionChangeCount: number;
   // 撤销/重做历史栈
   history: { items: LabelItem[]; labelConfig: LabelConfig }[];
   historyIndex: number;
@@ -84,6 +86,7 @@ const initialState: AppState = {
   diag: [],
   loadError: '',
   batchRecordIds: [],
+  selectionChangeCount: 0,
   history: [],
   historyIndex: -1,
   printCopies: 1,
@@ -133,8 +136,7 @@ function reducer(state: AppState, action: Action): AppState {
     }
 
     case 'UPDATE_ITEM': {
-      const item = state.items.find((it) => it.id === action.id);
-      if (item?.locked) return state; // 锁定元素不可改
+      // lockedPosition 只锁位置，不锁属性编辑（行列数、样式等都能改）
       return {
         ...state,
         items: state.items.map((it) => it.id === action.id ? { ...it, ...action.patch } : it),
@@ -143,8 +145,6 @@ function reducer(state: AppState, action: Action): AppState {
     }
 
     case 'DELETE_ITEM': {
-      const item = state.items.find((it) => it.id === action.id);
-      if (item?.locked) return state; // 锁定元素不可删
       return {
         ...state,
         items: state.items.filter((it) => it.id !== action.id),
@@ -158,7 +158,7 @@ function reducer(state: AppState, action: Action): AppState {
 
     case 'MOVE_ITEM': {
       const item = state.items.find((it) => it.id === action.id);
-      if (item?.locked) return state;
+      if (item?.lockedPosition) return state; // 位置锁定：不可拖动
       return {
         ...state,
         items: state.items.map((it) => it.id === action.id ? { ...it, x: action.x, y: action.y } : it),
@@ -167,8 +167,7 @@ function reducer(state: AppState, action: Action): AppState {
     }
 
     case 'RESIZE_ITEM': {
-      const item = state.items.find((it) => it.id === action.id);
-      if (item?.locked) return state;
+      // lockedPosition 不锁缩放（表格可调大小）
       return {
         ...state,
         items: state.items.map((it) => it.id === action.id ? { ...it, width: action.width, height: action.height } : it),
@@ -178,7 +177,7 @@ function reducer(state: AppState, action: Action): AppState {
 
     case 'DUPLICATE_ITEM': {
       const orig = state.items.find((it) => it.id === action.id);
-      if (!orig || orig.locked) return state;
+      if (!orig) return state;
       const copy: LabelItem = {
         ...orig,
         id: `item_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -239,7 +238,7 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, loading: action.value };
 
     case 'SET_BATCH_RECORDS':
-      return { ...state, batchRecordIds: action.recordIds };
+      return { ...state, batchRecordIds: action.recordIds, selectionChangeCount: state.selectionChangeCount + 1 };
 
     case 'SET_PRINT_COPIES':
       return { ...state, printCopies: action.value };
@@ -289,7 +288,9 @@ interface AppContextValue {
   getFieldValue: (fieldId: string, recordId?: string) => string | number;
   reloadBitable: () => Promise<void>;
   refreshSelection: () => Promise<void>;
-  selectAllRecords: () => void;
+  selectAllRecords: (ids?: string[]) => void;
+  toggleBatchRecord: (recordId: string) => void;
+  clearBatch: () => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -316,18 +317,19 @@ function createDefaultItem(field: Field, x: number, y: number): LabelItem {
   return base;
 }
 
-// 创建默认表格元素——置底、居中、锁定
+// 创建默认表格元素——距边界 2mm，位置锁定（不可拖动，但可编辑属性/行列数）
 function createTableItem(labelConfig: LabelConfig): LabelItem {
   const rows = 3;
   const cols = 2;
   const cells: TableCell[] = Array.from({ length: rows * cols }, () => ({ fieldId: null, staticText: '', prefix: '' }));
-  // 默认占满整个标签，居中（x=0,y=0,width=labelWidth,height=labelHeight）
+  const margin = 2; // 距边界 2mm
   return {
     id: genId(),
     fieldId: '', fieldName: '表格', type: 'table',
-    x: 0, y: 0,
-    width: labelConfig.labelWidth,
-    height: labelConfig.labelHeight,
+    x: margin,
+    y: margin,
+    width: labelConfig.labelWidth - margin * 2,
+    height: labelConfig.labelHeight - margin * 2,
     fontSize: 9, fontWeight: 'normal', fontStyle: 'normal', color: '#000000',
     textAlign: 'left', verticalAlign: 'middle', lineHeight: 1.2,
     borderStyle: 'none', borderWidth: 1, borderColor: '#000000',
@@ -335,7 +337,8 @@ function createTableItem(labelConfig: LabelConfig): LabelItem {
     tableRows: rows, tableCols: cols, tableCells: cells,
     tableShowBorder: true, tableHeader: false, tableFontSize: 9, tableBorderWidth: 0.5,
     tableColWidths: [1, 1],
-    locked: true, // 默认锁定：不可移动/缩放/删除
+    tableCellPaddingV: 2, tableCellPaddingH: 3,
+    lockedPosition: true, // 位置锁定：不可拖动，但可选中编辑
   };
 }
 
@@ -414,9 +417,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_BATCH_RECORDS', recordIds: ids });
   }, []);
 
-  const selectAllRecords = useCallback(() => {
+  const selectAllRecords = useCallback((ids?: string[]) => {
     const s = stateRef.current;
-    dispatch({ type: 'SET_BATCH_RECORDS', recordIds: s.records.map(r => r.id) });
+    const target = ids && ids.length > 0 ? ids : s.records.map(r => r.id);
+    dispatch({ type: 'SET_BATCH_RECORDS', recordIds: target });
+  }, []);
+
+  // 插件内勾选/取消勾选单条记录（多选由插件自行管理，不依赖飞书 SDK）
+  const toggleBatchRecord = useCallback((recordId: string) => {
+    const s = stateRef.current;
+    const exists = s.batchRecordIds.includes(recordId);
+    const next = exists
+      ? s.batchRecordIds.filter(id => id !== recordId)
+      : [...s.batchRecordIds, recordId];
+    dispatch({ type: 'SET_BATCH_RECORDS', recordIds: next });
+  }, []);
+
+  const clearBatch = useCallback(() => {
+    dispatch({ type: 'SET_BATCH_RECORDS', recordIds: [] });
   }, []);
 
   const reloadBitable = useCallback(async () => {
@@ -442,14 +460,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let offSel: (() => void) | undefined;
     let offTable: (() => void) | undefined;
     if (isInFeishu()) {
+      // onSelectionChange：单选时同步预览记录（飞书 SDK Selection 只支持单选）
+      // 多选由插件内 RecordPicker 自行管理（SDK 不暴露多选 API）
       onSelectionChange((recordIds) => {
-        dispatch({ type: 'SET_BATCH_RECORDS', recordIds });
         if (recordIds.length === 1) dispatch({ type: 'SELECT_RECORD', id: recordIds[0] });
       }).then((off) => { offSel = off; }).catch(() => {});
       onTableChange(() => { reloadBitable(); }).then((off) => { offTable = off; }).catch(() => {});
       refreshSelection();
     }
-    return () => { offSel?.(); offTable?.(); };
+    return () => {
+      offSel?.();
+      offTable?.();
+    };
   }, [reloadBitable, refreshSelection]);
 
   // 布局持久化
@@ -474,7 +496,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <AppContext.Provider value={{
       state, dispatch, addItemFromField, addStaticText, addTable,
       duplicateSelected, undo, redo, saveTemplate, loadTemplateById, deleteTemplate,
-      getFieldValue, reloadBitable, refreshSelection, selectAllRecords,
+      getFieldValue, reloadBitable, refreshSelection, selectAllRecords, toggleBatchRecord, clearBatch,
     }}>
       {children}
     </AppContext.Provider>

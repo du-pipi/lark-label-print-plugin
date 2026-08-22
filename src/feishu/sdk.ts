@@ -225,25 +225,27 @@ export async function loadBitableData(): Promise<BitableData> {
 }
 
 // 监听选中记录变化，返回取消监听函数
-// 回调参数为当前选中的所有记录 ID 列表（支持飞书多选）
+// 飞书 onSelectionChange 在多选时回调数据不稳定（可能只返回最后一条 recordId），
+// 因此回调里不直接解析事件数据，而是主动调 getSelection() 拿完整的 Selection（含 recordIds）。
 export async function onSelectionChange(
   cb: (recordIds: string[]) => void
 ): Promise<() => void> {
-  const off = bitable.base.onSelectionChange((e: { data: { recordId?: string | null; recordIds?: string[] } }) => {
-    // 飞书多选时返回 recordIds 数组，单选时返回 recordId
-    const ids = e?.data?.recordIds ?? (e?.data?.recordId ? [e.data.recordId] : []);
+  const off = bitable.base.onSelectionChange(async () => {
+    // 触发后主动获取完整选中状态（含多选）
+    const ids = await getSelectedRecordIds();
     cb(ids);
   });
   return () => { try { off && off(); } catch { /* noop */ } };
 }
 
-// 主动获取当前选中的记录 ID 列表（支持飞书多选）
+// 主动获取当前选中的记录 ID（飞书 SDK Selection 只支持单选 recordId，不支持多选 recordIds）
+// 多选场景由插件内自行维护勾选列表（见 RecordPicker 组件）
 export async function getSelectedRecordIds(): Promise<string[]> {
   try {
-    const sel = await bitable.base.getSelection();
-    // Selection 含 recordIds（新版）或 recordId（旧版单选）
-    const ids = (sel as any)?.recordIds ?? ((sel as any)?.recordId ? [(sel as any).recordId] : []);
-    return ids;
+    const sel: any = await bitable.base.getSelection();
+    if (!sel) return [];
+    // Selection 只有 recordId（单选），没有 recordIds
+    return sel.recordId ? [sel.recordId] : [];
   } catch {
     return [];
   }

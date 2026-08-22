@@ -48,8 +48,8 @@ export interface LabelItem {
   // 静态文本（非字段绑定）
   isStatic?: boolean;
   staticText?: string;
-  // 锁定：不可移动/缩放/删除（如置底表格）
-  locked?: boolean;
+  // 位置锁定：不可拖动位置，但可选中编辑属性/改行列数/缩放
+  lockedPosition?: boolean;
   // 表格元素特有
   tableRows?: number;
   tableCols?: number;
@@ -59,6 +59,8 @@ export interface LabelItem {
   tableFontSize?: number;
   tableBorderWidth?: number; // 表格单元格边框宽度（px 逻辑单位，渲染时 ×scale；0 表示无边框）
   tableColWidths?: number[]; // 各列宽度比例（如 [1,2,1] 表示中间列是两侧两倍宽）；未设则等宽
+  tableCellPaddingV?: number; // 单元格上下内边距（px 逻辑单位，渲染时 ×scale）
+  tableCellPaddingH?: number; // 单元格左右内边距（px 逻辑单位，渲染时 ×scale）
 }
 
 // 标签纸张配置
