@@ -617,6 +617,36 @@ input, select {
   }
 }
 
+/* ========== 标签内表格 ========== */
+.label-table-cell {
+  border: 1px dashed #e5e6eb;
+}
+
+.print-mode .label-table-cell {
+  border: 1px solid transparent;
+}
+
+/* 表格单元格编辑器（属性面板） */
+.tc-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.tc-pos {
+  font-size: 10px;
+  color: #86909c;
+  width: 36px;
+  flex-shrink: 0;
+}
+
+.table-cell-editor {
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
 /* 滚动条美化 */
 ::-webkit-scrollbar {
   width: 6px;

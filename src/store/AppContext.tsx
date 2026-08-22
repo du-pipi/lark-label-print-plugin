@@ -1,7 +1,7 @@
 import { createContext, useContext, useReducer, type ReactNode, useCallback, useEffect, useRef } from 'react';
-import type { LabelItem, LabelConfig, Field, RecordData } from '../types';
+import type { LabelItem, LabelConfig, Field, RecordData, TableCell, FieldDiag } from '../types';
 import { defaultLabelConfig, mockFields, mockRecords } from '../mock/data';
-import { loadBitableData, onSelectionChange, onTableChange, isInFeishu } from '../feishu/sdk';
+import { loadBitableData, onSelectionChange, onTableChange, isInFeishu, getSelectedRecordIds } from '../feishu/sdk';
 
 // ========== 状态定义 ==========
 interface AppState {
@@ -16,6 +16,12 @@ interface AppState {
   loading: boolean;
   // 当前数据来源：feishu 真实数据 / mock 演示数据
   dataSource: 'feishu' | 'mock';
+  // 字段诊断（暴露飞书原始值结构，排查解析问题）
+  diag: FieldDiag[];
+  // 取数错误信息（loadBitableData 抛错时记录，诊断面板显示）
+  loadError: string;
+  // 飞书多维表格中当前勾选的记录 ID 列表（支持批量打印）
+  batchRecordIds: string[];
 }
 
 const LS_KEY = 'lark-label-print-layout-v1';
@@ -57,6 +63,9 @@ const initialState: AppState = {
   tableName: '',
   loading: true,
   dataSource: 'mock',
+  diag: [],
+  loadError: '',
+  batchRecordIds: [],
 };
 
 // ========== Action 定义 ==========
@@ -74,8 +83,9 @@ type Action =
   | { type: 'BRING_TO_FRONT'; id: string }
   | { type: 'SEND_TO_BACK'; id: string }
   // 数据加载
-  | { type: 'SET_BITABLE'; fields: Field[]; records: RecordData[]; tableName: string; dataSource: 'feishu' | 'mock' }
-  | { type: 'SET_LOADING'; value: boolean };
+  | { type: 'SET_BITABLE'; fields: Field[]; records: RecordData[]; tableName: string; dataSource: 'feishu' | 'mock'; diag: FieldDiag[]; loadError: string }
+  | { type: 'SET_LOADING'; value: boolean }
+  | { type: 'SET_BATCH_RECORDS'; recordIds: string[] };
 
 // ========== Reducer ==========
 function reducer(state: AppState, action: Action): AppState {
@@ -161,12 +171,17 @@ function reducer(state: AppState, action: Action): AppState {
         records: action.records,
         tableName: action.tableName,
         dataSource: action.dataSource,
+        diag: action.diag,
+        loadError: action.loadError,
         selectedRecordId: action.records[0]?.id ?? '',
         loading: false,
       };
 
     case 'SET_LOADING':
       return { ...state, loading: action.value };
+
+    case 'SET_BATCH_RECORDS':
+      return { ...state, batchRecordIds: action.recordIds };
 
     default:
       return state;
@@ -180,8 +195,10 @@ interface AppContextValue {
   // 便捷方法
   addItemFromField: (field: Field, x?: number, y?: number) => void;
   addStaticText: (x?: number, y?: number) => void;
-  getFieldValue: (fieldId: string) => string | number;
+  addTable: (x?: number, y?: number) => void;
+  getFieldValue: (fieldId: string, recordId?: string) => string | number;
   reloadBitable: () => Promise<void>;
+  refreshSelection: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -232,6 +249,49 @@ function createDefaultItem(field: Field, x: number, y: number): LabelItem {
   return base;
 }
 
+// 创建默认表格元素（默认 3 行 2 列）
+function createTableItem(x: number, y: number): LabelItem {
+  const rows = 3;
+  const cols = 2;
+  const cells: TableCell[] = Array.from({ length: rows * cols }, () => ({
+    fieldId: null,
+    staticText: '',
+    prefix: '',
+  }));
+  return {
+    id: genId(),
+    fieldId: '',
+    fieldName: '表格',
+    type: 'table',
+    x,
+    y,
+    width: 50,
+    height: 30,
+    fontSize: 9,
+    fontWeight: 'normal',
+    fontStyle: 'normal',
+    color: '#000000',
+    textAlign: 'left',
+    verticalAlign: 'middle',
+    lineHeight: 1.2,
+    borderStyle: 'none',
+    borderWidth: 1,
+    borderColor: '#000000',
+    borderRadius: 0,
+    padding: 2,
+    backgroundColor: 'transparent',
+    objectFit: 'contain',
+    tableRows: rows,
+    tableCols: cols,
+    tableCells: cells,
+    tableShowBorder: true,
+    tableHeader: false,
+    tableFontSize: 9,
+    tableBorderWidth: 0.5,
+    tableColWidths: [1, 1], // 默认两列等宽
+  };
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const stateRef = useRef(state);
@@ -253,27 +313,51 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'ADD_ITEM', item });
   }, []);
 
+  const addTable = useCallback((x = 5, y = 5) => {
+    const item = createTableItem(x, y);
+    dispatch({ type: 'ADD_ITEM', item });
+  }, []);
+
   const getFieldValue = useCallback(
-    (fieldId: string) => {
-      const record = stateRef.current.records.find((r) => r.id === stateRef.current.selectedRecordId);
-      return record?.fields[fieldId] ?? '';
+    (fieldId: string, recordId?: string) => {
+      const s = stateRef.current;
+      if (!fieldId) return '';
+      // 优先用指定 recordId（批量模式）；否则用当前选中记录；匹配不到回退第一条
+      const rid = recordId || s.selectedRecordId;
+      const rec = s.records.find((r) => r.id === rid) || s.records[0];
+      if (!rec) return '';
+      const f = s.fields.find((x) => x.id === fieldId);
+      const v = rec.fields[fieldId];
+      if (v !== undefined && v !== '') return v;
+      // 双键兜底：按字段名取值（飞书返回键为 name 时）
+      if (f && rec.fields[f.name] !== undefined) return rec.fields[f.name];
+      return '';
     },
     []
   );
 
+  const refreshSelection = useCallback(async () => {
+    if (!isInFeishu()) return;
+    const ids = await getSelectedRecordIds();
+    dispatch({ type: 'SET_BATCH_RECORDS', recordIds: ids });
+  }, []);
+
   const reloadBitable = useCallback(async () => {
     if (!isInFeishu()) {
       // 非飞书环境：保留 mock 演示数据，方便本地开发与预览
-      dispatch({ type: 'SET_BITABLE', fields: mockFields, records: mockRecords, tableName: '演示数据（未接入飞书）', dataSource: 'mock' });
+      dispatch({ type: 'SET_BITABLE', fields: mockFields, records: mockRecords, tableName: '演示数据（未接入飞书）', dataSource: 'mock', diag: [], loadError: '' });
       return;
     }
     dispatch({ type: 'SET_LOADING', value: true });
     try {
       const data = await loadBitableData();
-      dispatch({ type: 'SET_BITABLE', fields: data.fields, records: data.records, tableName: data.tableName, dataSource: 'feishu' });
+      const errMsg = data.records.length === 0 ? '记录数为 0：getRecordsByPage 可能未返回数据或被权限限制' : '';
+      dispatch({ type: 'SET_BITABLE', fields: data.fields, records: data.records, tableName: data.tableName, dataSource: 'feishu', diag: data.diag, loadError: errMsg });
     } catch (err) {
+      // 保留错误信息到诊断面板，不再静默吞掉
+      const errMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
       console.error('[飞书SDK] 读取数据失败：', err);
-      dispatch({ type: 'SET_BITABLE', fields: mockFields, records: mockRecords, tableName: '读取失败（回退演示数据）', dataSource: 'mock' });
+      dispatch({ type: 'SET_BITABLE', fields: mockFields, records: mockRecords, tableName: '读取失败（回退演示数据）', dataSource: 'mock', diag: [], loadError: errMsg });
     }
   }, []);
 
@@ -284,10 +368,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let offSel: (() => void) | undefined;
     let offTable: (() => void) | undefined;
     if (isInFeishu()) {
-      onSelectionChange((recordId) => {
-        if (recordId) dispatch({ type: 'SELECT_RECORD', id: recordId });
+      onSelectionChange((recordIds) => {
+        // 更新批量勾选列表
+        dispatch({ type: 'SET_BATCH_RECORDS', recordIds });
+        // 单选时同步预览记录
+        if (recordIds.length === 1) {
+          dispatch({ type: 'SELECT_RECORD', id: recordIds[0] });
+        }
       }).then((off) => { offSel = off; }).catch(() => {});
       onTableChange(() => { reloadBitable(); }).then((off) => { offTable = off; }).catch(() => {});
+      // 初始获取一次选中状态
+      refreshSelection();
     }
     return () => {
       offSel?.();
@@ -301,7 +392,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [state.items, state.labelConfig]);
 
   return (
-    <AppContext.Provider value={{ state, dispatch, addItemFromField, addStaticText, getFieldValue, reloadBitable }}>
+    <AppContext.Provider value={{ state, dispatch, addItemFromField, addStaticText, addTable, getFieldValue, reloadBitable, refreshSelection }}>
       {children}
     </AppContext.Provider>
   );

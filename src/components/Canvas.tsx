@@ -5,10 +5,13 @@ import { mmToPx } from '../utils';
 
 export default function Canvas() {
   const { state, dispatch, addItemFromField } = useApp();
-  const { items, selectedItemId, labelConfig, fields } = state;
+  const { items, selectedItemId, labelConfig, fields, batchRecordIds } = state;
   const [scale, setScale] = useState(1.5);
   const [dragOverCell, setDragOverCell] = useState<number | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  // 是否批量预览模式（勾选了多条记录）
+  const isBatchMode = batchRecordIds.length > 1;
 
   // 计算页面尺寸
   const pageWidth = labelConfig.pageMarginLeft + labelConfig.pageMarginRight +
@@ -76,30 +79,77 @@ export default function Canvas() {
   return (
     <div className="canvas-area" ref={canvasRef} onClick={handleCanvasClick}>
       <div className="canvas-wrapper">
-        <div className="canvas-page" style={pageStyle}>
-          <div className="label-grid" style={gridStyle}>
-            {cells.map((cellIndex) => (
-              <div
-                key={cellIndex}
-                className={`label-cell edit-mode ${dragOverCell === cellIndex ? 'drag-over' : ''}`}
-                style={{ background: labelConfig.background }}
-                onDragOver={(e) => handleDragOver(e, cellIndex)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, cellIndex)}
-              >
-                {items.map((item) => (
-                  <LabelItemView
-                    key={item.id}
-                    item={item}
-                    scale={scale}
-                    isSelected={selectedItemId === item.id}
-                    onSelect={() => dispatch({ type: 'SELECT_ITEM', id: item.id })}
-                  />
-                ))}
-              </div>
+        {/* 批量预览模式：展示所有勾选记录的标签 */}
+        {isBatchMode && (
+          <div style={{ marginBottom: 16, padding: '8px 12px', background: '#e8f3ff', borderRadius: 8, fontSize: 12, color: '#165dff' }}>
+            📋 批量预览：已选中 {batchRecordIds.length} 条记录，每条按模板生成一个标签。点击「🖨️ 批量打印」输出全部。
+          </div>
+        )}
+
+        {/* 批量预览区域：每条记录一个标签，纵向排列 */}
+        {isBatchMode && batchRecordIds.map((rid, batchIdx) => (
+          <div
+            key={rid}
+            className="batch-label-page"
+            style={{
+              width: `${mmToPx(labelConfig.labelWidth) * scale}px`,
+              height: `${mmToPx(labelConfig.labelHeight) * scale}px`,
+              background: labelConfig.background,
+              border: '1px dashed #c9cdd4',
+              marginBottom: `${mmToPx(5) * scale}px`,
+              position: 'relative',
+              overflow: 'hidden',
+              breakAfter: 'page' as React.CSSProperties['breakAfter'],
+              pageBreakAfter: 'always' as React.CSSProperties['pageBreakAfter'],
+            }}
+          >
+            {/* 标签序号 */}
+            <div style={{ position: 'absolute', top: -16, left: 0, fontSize: 10, color: '#86909c' }}>
+              #{batchIdx + 1}
+            </div>
+            {items.map((item) => (
+              <LabelItemView
+                key={item.id}
+                item={item}
+                scale={scale}
+                isSelected={false}
+                onSelect={() => {}}
+                recordId={rid}
+                readOnly
+              />
             ))}
           </div>
-        </div>
+        ))}
+
+        {/* 编辑模式：单标签编辑画布（批量模式时隐藏） */}
+        {!isBatchMode && (
+          <>
+            <div className="canvas-page" style={pageStyle}>
+              <div className="label-grid" style={gridStyle}>
+                {cells.map((cellIndex) => (
+                  <div
+                    key={cellIndex}
+                    className={`label-cell edit-mode ${dragOverCell === cellIndex ? 'drag-over' : ''}`}
+                    style={{ background: labelConfig.background }}
+                    onDragOver={(e) => handleDragOver(e, cellIndex)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, cellIndex)}
+                  >
+                    {items.map((item) => (
+                      <LabelItemView
+                        key={item.id}
+                        item={item}
+                        scale={scale}
+                        isSelected={selectedItemId === item.id}
+                        onSelect={() => dispatch({ type: 'SELECT_ITEM', id: item.id })}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
 
         <div className="canvas-controls no-print">
           <button className="zoom-btn" onClick={zoomOut} title="缩小">−</button>
@@ -108,7 +158,8 @@ export default function Canvas() {
           </span>
           <button className="zoom-btn" onClick={zoomIn} title="放大">+</button>
           <span style={{ fontSize: 11, color: '#86909c', marginLeft: 8 }}>
-            {labelConfig.labelWidth}×{labelConfig.labelHeight}mm · {labelConfig.columns}×{labelConfig.rows}
+            {labelConfig.labelWidth}×{labelConfig.labelHeight}mm
+            {isBatchMode ? ` · 批量 ${batchRecordIds.length} 条` : ` · ${labelConfig.columns}×${labelConfig.rows}`}
           </span>
         </div>
       </div>

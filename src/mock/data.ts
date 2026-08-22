@@ -3,18 +3,18 @@ import type { Field, RecordData, LabelConfig, LabelPreset } from '../types';
 // ========== Mock 多维表格字段 ==========
 // 原型阶段使用模拟数据，后续替换为飞书 SDK 调用
 export const mockFields: Field[] = [
-  { id: 'fld_1', name: '商品名称', type: 'text' },
-  { id: 'fld_2', name: '商品编码', type: 'text' },
+  { id: 'fld_1', name: '名称', type: 'text' },
+  { id: 'fld_2', name: '编码', type: 'text' },
   { id: 'fld_3', name: '条码', type: 'barcode' },
   { id: 'fld_4', name: '价格', type: 'number' },
   { id: 'fld_5', name: '原价', type: 'number' },
   { id: 'fld_6', name: '规格', type: 'text' },
   { id: 'fld_7', name: '产地', type: 'text' },
-  { id: 'fld_8', name: '生产日期', type: 'date' },
-  { id: 'fld_9', name: '商品图片', type: 'image' },
+  { id: 'fld_8', name: '日期', type: 'date' },
+  { id: 'fld_9', name: '图片', type: 'image' },
   { id: 'fld_10', name: '二维码', type: 'qrcode' },
   { id: 'fld_11', name: '分类', type: 'select' },
-  { id: 'fld_12', name: '库存', type: 'number' },
+  { id: 'fld_12', name: '数量', type: 'number' },
 ];
 
 // ========== Mock 记录数据 ==========
@@ -117,8 +117,32 @@ export const labelPresets: LabelPreset[] = [
     config: { labelWidth: 40, labelHeight: 30, columns: 1, rows: 1, pageMarginTop: 0, pageMarginBottom: 0, pageMarginLeft: 0, pageMarginRight: 0, gapX: 0, gapY: 0 },
   },
   {
+    name: '单张 50×30mm（一页一个）',
+    config: { labelWidth: 50, labelHeight: 30, columns: 1, rows: 1, pageMarginTop: 0, pageMarginBottom: 0, pageMarginLeft: 0, pageMarginRight: 0, gapX: 0, gapY: 0 },
+  },
+  {
+    name: '单张 70×50mm（一页一个）',
+    config: { labelWidth: 70, labelHeight: 50, columns: 1, rows: 1, pageMarginTop: 0, pageMarginBottom: 0, pageMarginLeft: 0, pageMarginRight: 0, gapX: 0, gapY: 0 },
+  },
+  {
     name: '单张 80×50mm（一页一个）',
     config: { labelWidth: 80, labelHeight: 50, columns: 1, rows: 1, pageMarginTop: 0, pageMarginBottom: 0, pageMarginLeft: 0, pageMarginRight: 0, gapX: 0, gapY: 0 },
+  },
+  {
+    name: '单张 100×50mm（一页一个）',
+    config: { labelWidth: 100, labelHeight: 50, columns: 1, rows: 1, pageMarginTop: 0, pageMarginBottom: 0, pageMarginLeft: 0, pageMarginRight: 0, gapX: 0, gapY: 0 },
+  },
+  {
+    name: '物流单 100×100mm',
+    config: { labelWidth: 100, labelHeight: 100, columns: 1, rows: 1, pageMarginTop: 0, pageMarginBottom: 0, pageMarginLeft: 0, pageMarginRight: 0, gapX: 0, gapY: 0 },
+  },
+  {
+    name: '物流单 100×150mm',
+    config: { labelWidth: 100, labelHeight: 150, columns: 1, rows: 1, pageMarginTop: 0, pageMarginBottom: 0, pageMarginLeft: 0, pageMarginRight: 0, gapX: 0, gapY: 0 },
+  },
+  {
+    name: '物流单 100×200mm',
+    config: { labelWidth: 100, labelHeight: 200, columns: 1, rows: 1, pageMarginTop: 0, pageMarginBottom: 0, pageMarginLeft: 0, pageMarginRight: 0, gapX: 0, gapY: 0 },
   },
   {
     name: '整页 A4 210×297mm',
@@ -127,5 +151,13 @@ export const labelPresets: LabelPreset[] = [
   {
     name: '多张 60×40（一页 3×7）',
     config: { labelWidth: 60, labelHeight: 40, columns: 3, rows: 7, pageMarginTop: 10, pageMarginBottom: 10, pageMarginLeft: 10, pageMarginRight: 10, gapX: 2, gapY: 2 },
+  },
+  {
+    name: '多张 40×30（一页 4×9）',
+    config: { labelWidth: 40, labelHeight: 30, columns: 4, rows: 9, pageMarginTop: 10, pageMarginBottom: 10, pageMarginLeft: 10, pageMarginRight: 10, gapX: 2, gapY: 2 },
+  },
+  {
+    name: '多张 50×30（一页 3×9）',
+    config: { labelWidth: 50, labelHeight: 30, columns: 3, rows: 9, pageMarginTop: 10, pageMarginBottom: 10, pageMarginLeft: 10, pageMarginRight: 10, gapX: 2, gapY: 2 },
   },
 ];

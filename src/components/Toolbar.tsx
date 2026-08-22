@@ -5,17 +5,24 @@ import type { LabelConfig } from '../types';
 
 export default function Toolbar() {
   const { state, dispatch } = useApp();
-  const { labelConfig, records, selectedRecordId, items } = state;
+  const { labelConfig, records, selectedRecordId, items, batchRecordIds } = state;
   const [showSettings, setShowSettings] = useState(false);
 
+  const isBatchMode = batchRecordIds.length > 1;
+
   const handlePrint = () => {
-    // 动态写入 @page 尺寸，让打印机按标签纸实际大小出纸（而不是默认 A4）
-    const pageW = labelConfig.labelWidth * labelConfig.columns
-      + (labelConfig.columns - 1) * labelConfig.gapX
-      + labelConfig.pageMarginLeft + labelConfig.pageMarginRight;
-    const pageH = labelConfig.labelHeight * labelConfig.rows
-      + (labelConfig.rows - 1) * labelConfig.gapY
-      + labelConfig.pageMarginTop + labelConfig.pageMarginBottom;
+    // 批量模式：每个标签一页，页面尺寸 = 单个标签尺寸
+    // 单条模式：页面尺寸 = columns×rows 排列后的整页尺寸
+    const pageW = isBatchMode
+      ? labelConfig.labelWidth
+      : labelConfig.labelWidth * labelConfig.columns
+        + (labelConfig.columns - 1) * labelConfig.gapX
+        + labelConfig.pageMarginLeft + labelConfig.pageMarginRight;
+    const pageH = isBatchMode
+      ? labelConfig.labelHeight
+      : labelConfig.labelHeight * labelConfig.rows
+        + (labelConfig.rows - 1) * labelConfig.gapY
+        + labelConfig.pageMarginTop + labelConfig.pageMarginBottom;
     const pageStyleId = 'dynamic-page-size';
     let styleEl = document.getElementById(pageStyleId) as HTMLStyleElement | null;
     if (!styleEl) {
@@ -64,7 +71,7 @@ export default function Toolbar() {
     <>
       <div className="toolbar no-print">
         <div className="toolbar-left">
-          <span className="toolbar-title">🏷️ 商品标签打印</span>
+          <span className="toolbar-title">🏷️ 数据标签打印</span>
           {state.tableName && (
             <span style={{ fontSize: 11, color: '#86909c' }}>· {state.tableName}</span>
           )}
@@ -74,21 +81,30 @@ export default function Toolbar() {
           {state.dataSource === 'mock' && (
             <span style={{ fontSize: 11, color: '#ff7d00' }}>· 演示数据</span>
           )}
+          <span style={{ fontSize: 11, color: '#86909c' }}>· 记录 {records.length} 条</span>
+          {isBatchMode && (
+            <span style={{ fontSize: 11, color: '#165dff', fontWeight: 'bold' }}>
+              · 已选中 {batchRecordIds.length} 条
+            </span>
+          )}
           <div className="toolbar-divider" />
-          <div className="record-selector">
-            <label>预览记录:</label>
-            <select
-              className="toolbar-select"
-              value={selectedRecordId}
-              onChange={(e) => dispatch({ type: 'SELECT_RECORD', id: e.target.value })}
-            >
-              {records.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {recordLabel(r)}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* 批量模式时不显示单条预览选择器 */}
+          {!isBatchMode && (
+            <div className="record-selector">
+              <label>预览记录:</label>
+              <select
+                className="toolbar-select"
+                value={selectedRecordId}
+                onChange={(e) => dispatch({ type: 'SELECT_RECORD', id: e.target.value })}
+              >
+                {records.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {recordLabel(r)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="toolbar-right">
@@ -100,7 +116,7 @@ export default function Toolbar() {
           </button>
           <div className="toolbar-divider" />
           <button className="toolbar-btn primary" onClick={handlePrint}>
-            🖨️ 打印
+            {isBatchMode ? `🖨️ 批量打印 (${batchRecordIds.length})` : '🖨️ 打印'}
           </button>
         </div>
       </div>

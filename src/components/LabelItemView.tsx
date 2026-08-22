@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
 import { useApp } from '../store/AppContext';
-import type { LabelItem } from '../types';
+import type { LabelItem, TableCell } from '../types';
 import { mmToPx, ptToPx, getDisplayValue } from '../utils';
 import { BarcodeView, QrcodeView } from './Barcode';
 
@@ -9,10 +9,12 @@ interface Props {
   scale: number;
   isSelected: boolean;
   onSelect: () => void;
+  recordId?: string;  // 批量模式：指定记录取值；不传则用 selectedRecordId
+  readOnly?: boolean; // 批量预览模式：禁用拖拽/缩放
 }
 
-export default function LabelItemView({ item, scale, isSelected, onSelect }: Props) {
-  const { dispatch, getFieldValue } = useApp();
+export default function LabelItemView({ item, scale, isSelected, onSelect, recordId, readOnly }: Props) {
+  const { dispatch, getFieldValue, state } = useApp();
   const itemRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -47,6 +49,7 @@ export default function LabelItemView({ item, scale, isSelected, onSelect }: Pro
 
   // 拖动元素
   const handleMouseDown = (e: React.MouseEvent) => {
+    if (readOnly) return;
     if ((e.target as HTMLElement).classList.contains('resize-handle')) return;
     e.stopPropagation();
     onSelect();
@@ -120,7 +123,87 @@ export default function LabelItemView({ item, scale, isSelected, onSelect }: Pro
 
   // 渲染内容
   const renderContent = () => {
-    const value = item.isStatic ? (item.staticText || '') : getFieldValue(item.fieldId);
+    // 表格渲染：整体作为标签上的一个元素，内部用 grid 画 N×M 单元格
+    if (item.type === 'table') {
+      const rows = item.tableRows || 1;
+      const cols = item.tableCols || 1;
+      const cells = item.tableCells || [];
+      const fontSizePx = ptToPx(item.tableFontSize ?? item.fontSize) * scale;
+      const bw = Math.max(0, (item.tableBorderWidth ?? 0.5)); // 逻辑边框宽
+      const bwPx = `${bw * scale}px`;
+      // 列宽：tableColWidths 指定比例，未设则等宽
+      const colWidths = item.tableColWidths && item.tableColWidths.length === cols
+        ? item.tableColWidths
+        : Array(cols).fill(1);
+      const gridCols = colWidths.map((w) => `${w}fr`).join(' ');
+
+      const renderTableCell = (cell?: TableCell): { text: string; placeholder: boolean } => {
+        if (!cell) return { text: '', placeholder: false };
+        if (cell.fieldId) {
+          const f = state.fields.find((x) => x.id === cell.fieldId);
+          const raw = getFieldValue(cell.fieldId, recordId);
+          const val = getDisplayValue(f?.type ?? 'text', raw);
+          if (!val) return { text: f?.name ?? '', placeholder: true };
+          return { text: (cell.prefix || '') + val, placeholder: false };
+        }
+        return { text: cell.staticText, placeholder: false };
+      };
+
+      return (
+        <div
+          className="label-item-content"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: gridCols,
+            gridTemplateRows: `repeat(${rows}, 1fr)`,
+            width: '100%',
+            height: '100%',
+            fontSize: `${fontSizePx}px`,
+            pointerEvents: 'none',
+            // 外边框由容器提供（top + left），单元格提供 right + bottom，避免重叠双倍
+            ...(item.tableShowBorder && bw > 0 ? {
+              borderTop: `${bwPx} solid #000`,
+              borderLeft: `${bwPx} solid #000`,
+            } : {}),
+          }}
+        >
+          {Array.from({ length: rows * cols }, (_, idx) => {
+            const cell = cells[idx];
+            const r = Math.floor(idx / cols);
+            const c = idx % cols;
+            const isHeader = !!item.tableHeader && r === 0;
+            const { text, placeholder } = renderTableCell(cell);
+            return (
+              <div
+                key={idx}
+                className="label-table-cell"
+                style={{
+                  // 内部边框：每个单元格画 right + bottom（最后一列/行不画，由容器外框闭合）
+                  ...(item.tableShowBorder && bw > 0 ? {
+                    borderRight: c < cols - 1 ? `${bwPx} solid #000` : `${bwPx} solid #000`,
+                    borderBottom: `${bwPx} solid #000`,
+                  } : {}),
+                  ...(isHeader ? { fontWeight: 'bold', background: '#f2f3f5' } : {}),
+                  textAlign: item.textAlign,
+                  color: placeholder ? '#c9cdd4' : item.color,
+                  display: 'flex',
+                  alignItems: item.verticalAlign === 'middle' ? 'center' : item.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start',
+                  justifyContent:
+                    item.textAlign === 'center' ? 'center' : item.textAlign === 'right' ? 'flex-end' : 'flex-start',
+                  padding: `${2 * scale}px ${3 * scale}px`,
+                  overflow: 'hidden',
+                  wordBreak: 'break-all',
+                }}
+              >
+                {text}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    const value = item.isStatic ? (item.staticText || '') : getFieldValue(item.fieldId, recordId);
 
     if (item.type === 'image') {
       const imgUrl = typeof value === 'string' ? value : '';
@@ -177,7 +260,7 @@ export default function LabelItemView({ item, scale, isSelected, onSelect }: Pro
       onMouseDown={handleMouseDown}
     >
       {renderContent()}
-      {isSelected && (
+      {isSelected && !readOnly && (
         <>
           <div className="resize-handle e" onMouseDown={handleResizeStart} />
           <div className="resize-handle s" onMouseDown={handleResizeStart} />
