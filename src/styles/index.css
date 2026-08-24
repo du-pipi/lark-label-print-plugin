@@ -882,18 +882,21 @@ input, select {
   .canvas-page {
     box-shadow: none !important;
     page-break-after: always;
+    /* 打印时页面水平居中，避免标签贴左边 */
+    margin: 0 auto !important;
   }
 
   .canvas-page:last-child {
     page-break-after: auto;
   }
 
-  /* 批量模式：每个标签一页 */
+  /* 批量模式：每个标签一页，水平居中 */
   .batch-label-page {
     box-shadow: none !important;
     border: none !important;
     page-break-after: always;
     page-break-inside: avoid;
+    margin: 0 auto !important;
   }
 
   .batch-label-page:last-child {
@@ -911,15 +914,23 @@ input, select {
   .resize-handle {
     display: none !important;
   }
+
+  /* 打印时不显示位置锁定标记（屏幕上才需要的 UI 提示） */
+  .label-item .lock-badge,
+  .label-item.locked-position > div:last-child {
+    display: none !important;
+  }
+
+  /* 编辑痕迹：网格虚线边框、拖动辅助线等全部隐藏 */
+  .label-cell.edit-mode {
+    border: none !important;
+  }
 }
 
 /* ========== 标签内表格 ========== */
+/* 单元格边框完全由 tableShowBorder 开关 + tableBorderWidth 控制（实线黑色），不在此强制虚线 */
 .label-table-cell {
-  border: 1px dashed #e5e6eb;
-}
-
-.print-mode .label-table-cell {
-  border: 1px solid transparent;
+  border: none;
 }
 
 /* 表格单元格编辑器（属性面板） */

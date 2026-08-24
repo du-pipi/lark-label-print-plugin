@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, type ReactNode, useCallback, useEffect, useRef } from 'react';
+import { createContext, useContext, useReducer, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import type { LabelItem, LabelConfig, Field, RecordData, TableCell, FieldDiag, LabelTemplate } from '../types';
 import { defaultLabelConfig, mockFields, mockRecords } from '../mock/data';
 import { loadBitableData, onSelectionChange, onTableChange, isInFeishu, getSelectedRecordIds } from '../feishu/sdk';
@@ -344,6 +344,8 @@ function createTableItem(labelConfig: LabelConfig): LabelItem {
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  // 画布预览缩放（仅屏幕预览用，打印时临时置 1 输出物理尺寸）
+  const [scale, setScale] = useState(1.5);
   const stateRef = useRef(state);
   stateRef.current = state;
 
@@ -497,6 +499,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       state, dispatch, addItemFromField, addStaticText, addTable,
       duplicateSelected, undo, redo, saveTemplate, loadTemplateById, deleteTemplate,
       getFieldValue, reloadBitable, refreshSelection, selectAllRecords, toggleBatchRecord, clearBatch,
+      scale, setScale,
     }}>
       {children}
     </AppContext.Provider>

@@ -5,7 +5,7 @@ import { labelPresets } from '../mock/data';
 import type { LabelConfig, LabelTemplate } from '../types';
 
 export default function Toolbar() {
-  const { state, dispatch, undo, redo, saveTemplate, loadTemplateById, deleteTemplate, selectAllRecords, clearBatch } = useApp();
+  const { state, dispatch, undo, redo, saveTemplate, loadTemplateById, deleteTemplate, selectAllRecords, clearBatch, setScale } = useApp();
   const { labelConfig, records, selectedRecordId, items, batchRecordIds } = state;
   const [showSettings, setShowSettings] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -43,12 +43,19 @@ export default function Toolbar() {
     }
     styleEl.textContent = `@page { size: ${pageW}mm ${pageH}mm; margin: 0; }`;
 
+    // 打印时：预览缩放置 1（输出物理尺寸，不被放大），并加 print-mode 类隐藏编辑痕迹
+    setScale(1);
+    document.documentElement.classList.add('print-mode');
+
     // 直接调用系统打印对话框，打印当前页面（所见即所得）
     // @media print CSS 自动隐藏编辑 UI，只保留标签内容
-    // 留足 @page 尺寸生效时间，避免打印时标签被缩放裁切
+    // 留足 @page 尺寸生效 + React 用 scale=1 重渲染的时间，避免标签被缩放/裁切
     setTimeout(() => {
       window.print();
-    }, 150);
+      // 打印结束后恢复预览缩放与 UI 状态
+      document.documentElement.classList.remove('print-mode');
+      setScale(prevScale);
+    }, 200);
   };
 
   const handleClear = () => {

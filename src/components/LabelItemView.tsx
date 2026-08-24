@@ -331,9 +331,9 @@ export default function LabelItemView({ item, scale, isSelected, onSelect, recor
           pointerEvents: 'none', zIndex: 9999,
         }} />
       )}
-      {/* 位置锁定标记 */}
+      {/* 位置锁定标记（仅屏幕显示，打印隐藏） */}
       {isLockedPosition && (
-        <div style={{
+        <div className="lock-badge" style={{
           position: 'absolute', top: 2, right: 2, fontSize: 8, color: '#86909c',
           background: 'rgba(255,255,255,0.8)', borderRadius: 2, padding: '0 2px',
           pointerEvents: 'none',

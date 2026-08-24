@@ -5,9 +5,8 @@ import { Icon } from './Icon';
 import { mmToPx } from '../utils';
 
 export default function Canvas() {
-  const { state, dispatch, addItemFromField } = useApp();
+  const { state, dispatch, addItemFromField, scale, setScale } = useApp();
   const { items, selectedItemId, labelConfig, fields, batchRecordIds, printCopies } = state;
-  const [scale, setScale] = useState(1.5);
   const [dragOverCell, setDragOverCell] = useState<number | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
 
